@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
+    <!-- Login Screen -->
     <div class="login-screen" id="loginScreen">
       <div class="login-box">
         <h3>Secure Login</h3>
@@ -18,10 +19,15 @@
       </div>
     </div>
 
+    <!-- Main App -->
     <div id="mainApp" class="main-app hidden">
       <div class="top-bar">
         <h1>Policy Path</h1>
         <div id="updateBox">Last updated: Never</div>
+
+        <!-- New: Identity button (opens Netlify Identity widget) -->
+        <button id="idBtn" title="Account / Sign in">Sign in</button>
+
         <button id="adminBtn">⚙️</button>
         <div id="adminMenu" class="dropdown">
           <ul>
@@ -80,6 +86,48 @@
       </div>
     </div>
 
+    <!-- Netlify Identity CDN widget (must be before your main.ts) -->
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+    <script>
+      (function () {
+        // guard if the widget isn't loaded for any reason
+        if (!window.netlifyIdentity) return;
+
+        // initialize the widget
+        netlifyIdentity.init();
+
+        // simple helper to keep the button label tidy
+        function setBtnLabel(user) {
+          var btn = document.getElementById('idBtn');
+          if (!btn) return;
+          btn.textContent = user ? 'Account' : 'Sign in';
+          btn.title = user ? (user.email || 'Account') : 'Sign in';
+        }
+
+        // update label on init/login/logout
+        netlifyIdentity.on('init', setBtnLabel);
+        netlifyIdentity.on('login', function(user){
+          setBtnLabel(user);
+          // reload so your app picks up the fresh Identity JWT if you use it
+          location.reload();
+        });
+        netlifyIdentity.on('logout', function(){
+          setBtnLabel(null);
+          location.reload();
+        });
+
+        // clicking the button opens the Identity widget
+        document.addEventListener('DOMContentLoaded', function(){
+          var btn = document.getElementById('idBtn');
+          if (btn) btn.addEventListener('click', function(){
+            netlifyIdentity.open(); // opens login/account modal
+          });
+        });
+      })();
+    </script>
+
+    <!-- Your app scripts -->
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
+
