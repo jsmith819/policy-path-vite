@@ -8,9 +8,12 @@ export function safeHTML(html: string): string {
     ALLOWED_TAGS: [
       'h1','h2','h3','h4','h5','h6','p','strong','em','ul','ol','li',
       'a','br','hr','blockquote','span','div','table','thead','tbody',
-      'tr','th','td'
+      'tr','th','td',
+      // allow embedded stylesheet blocks in the document HTML
+      'style'
     ],
-    ALLOWED_ATTR: ['href','target','rel','class','id','colspan','rowspan'],
+    // keep class/id (for document CSS selectors) and allow inline styles
+    ALLOWED_ATTR: ['href','target','rel','class','id','colspan','rowspan','style'],
     ALLOW_DATA_ATTR: false
   });
 }
