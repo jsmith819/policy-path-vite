@@ -14,16 +14,5 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "geolocation=(), camera=(), microphone=()"
     X-Frame-Options = "DENY"
-    # If your docs have <img src="https://...amazonaws.com/..."> add that domain here:
-    # img-src 'self' data: https://*.amazonaws.com;
-    # netlify.toml (CSP part only)
-Content-Security-Policy = "default-src 'self'; \
-  connect-src 'self'; \
-  img-src 'self' data:; \
-  script-src 'self' https://identity.netlify.com; \
-  style-src 'self' 'unsafe-inline'; \
-  frame-src https://identity.netlify.com; \
-  object-src 'none'; \
-  frame-ancestors 'none'; \
-  base-uri 'self'"
-
+    # SINGLE LINE — no backslashes:
+    Content-Security-Policy = "default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
