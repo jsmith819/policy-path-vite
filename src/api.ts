@@ -1,13 +1,9 @@
-// Optional: bump this so you can see if the build that’s running is new
-console.log('[PolicyPath] BUILD TAG:', '2025‑08‑13‑10:55');
-
 import { slugify } from './slugify';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/.netlify/functions';
 
 export async function fetchDocumentHtml(filename: string): Promise<string> {
   const url = `${API_BASE_URL}/get-document?file=${encodeURIComponent(filename)}`;
-  console.log('[PolicyPath] fetching document via function:', url);
   const res = await fetch(url);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
