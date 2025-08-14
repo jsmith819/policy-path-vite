@@ -1,5 +1,5 @@
 [build]
-  command = "npm ci && npm run build"
+  command = "npm ci && npm run build && cp template_contextualising.html dist/ && cp 1_the_individual_tokenised.html dist/"
   publish = "dist"
 
 # If you want a branch-specific build
