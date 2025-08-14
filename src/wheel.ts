@@ -22,7 +22,7 @@ export function drawWheel(
   const rCenter = 58;   // center circle radius
 
   // Label path sits slightly inboard of the outer rim
-  const labelInset   = 12;
+  const labelInset   = 24;
   // Trim at slice ends so text doesn't hit sharp corners
   const labelPadDeg  = 8;
 
