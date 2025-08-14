@@ -1,7 +1,8 @@
 // src/wheel.ts
-// Draws the 7-piece wheel with curved text along each slice & small number badges.
+// Wheel with curved arc labels, number badges, inner white ring, and radial separators.
 
 const NS = 'http://www.w3.org/2000/svg';
+const XLINK = 'http://www.w3.org/1999/xlink';
 
 export function drawWheel(
   svg: SVGSVGElement,
@@ -21,14 +22,14 @@ export function drawWheel(
   const rCenter = 58;     // center circle radius
 
   // Label arc positioning
-  const labelInset = 14;  // pixels inward from outer rim where the label path sits
-  const labelPadDeg = 10; // trim degrees at both ends so text doesn't collide with corners
+  const labelInset = 12;  // distance inward from outer rim for label path
+  const labelPadDeg = 6;  // trim near slice corners so text doesn't crash
 
-  // Badges (small numbers on slices)
+  // Badge look/placement
   const badgeRadius = 10;
-  const badgeOffset = 6;  // how far outside the rim the badge sits
+  const badgeOffset = 6; // distance outside outer rim
 
-  // Segments (keep keys exactly matching what main.ts expects)
+  // Segments (keys must match what main.ts expects)
   const segments: { key: string; color: string }[] = [
     { key: 'The organisation',      color: '#6aaf4b' },
     { key: 'Care and services',     color: '#7e5aa2' },
@@ -39,7 +40,7 @@ export function drawWheel(
   ];
   const center = { key: '1. The Individual', color: '#e94e77' };
 
-  // --- defs: drop shadow + gradients + (later) label paths
+  // --- defs: drop shadow + gradients + label paths container
   const defs = svg.appendChild(el('defs'));
 
   const drop = el('filter', { id: 'softDrop' });
@@ -56,14 +57,12 @@ export function drawWheel(
     stop(1, shade(base, -0.08));
     defs.appendChild(grad);
   };
-
   segments.forEach((s, i) => mkGrad(`segGrad${i}`, s.color));
   mkGrad('centerGrad', center.color);
 
-  // Utility fns
+  // Helpers
   const toRad = (deg: number) => (Math.PI / 180) * deg;
-  const polar = (r: number, aDeg: number) =>
-    ({ x: cx + r * Math.cos(toRad(aDeg)), y: cy + r * Math.sin(toRad(aDeg)) });
+  const polar = (r: number, aDeg: number) => ({ x: cx + r * Math.cos(toRad(aDeg)), y: cy + r * Math.sin(toRad(aDeg)) });
 
   const arcPath = (r: number, a0: number, a1: number) => {
     const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
@@ -73,18 +72,16 @@ export function drawWheel(
   };
 
   const donutPath = (a0: number, a1: number) => {
-    // outer arc (a0->a1), then inner arc back (a1->a0)
     const largeOuter = Math.abs(a1 - a0) > 180 ? 1 : 0;
     const po0 = polar(rOuter, a0);
     const po1 = polar(rOuter, a1);
     const pi0 = polar(rInner, a1);
     const pi1 = polar(rInner, a0);
-    const largeInner = largeOuter; // same span
     return [
       `M ${po0.x.toFixed(2)} ${po0.y.toFixed(2)}`,
       `A ${rOuter} ${rOuter} 0 ${largeOuter} 1 ${po1.x.toFixed(2)} ${po1.y.toFixed(2)}`,
       `L ${pi0.x.toFixed(2)} ${pi0.y.toFixed(2)}`,
-      `A ${rInner} ${rInner} 0 ${largeInner} 0 ${pi1.x.toFixed(2)} ${pi1.y.toFixed(2)}`,
+      `A ${rInner} ${rInner} 0 ${largeOuter} 0 ${pi1.x.toFixed(2)} ${pi1.y.toFixed(2)}`,
       'Z'
     ].join(' ');
   };
@@ -92,15 +89,24 @@ export function drawWheel(
   // Root group
   const g = svg.appendChild(el('g', { filter: 'url(#softDrop)' }));
 
-  // Draw 6 equal slices around -90° start (12 o'clock)
+  // Background: inner white ring (between center and slices)
+  const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: String(rInner - 1) });
+  innerRing.setAttribute('fill', 'none');
+  innerRing.setAttribute('stroke', '#fff');
+  innerRing.setAttribute('stroke-width', '12');
+  innerRing.style.pointerEvents = 'none';
+  g.appendChild(innerRing);
+
+  // Draw 6 equal slices around -90° start (top)
   const start = -90;
   const step = 360 / segments.length;
 
   segments.forEach((seg, idx) => {
     const a0 = start + idx * step;
     const a1 = a0 + step;
+    const mid = (a0 + a1) / 2;
 
-    // Slice body
+    // Slice
     const slice = el('path', {
       d: donutPath(a0, a1),
       fill: `url(#segGrad${idx})`,
@@ -119,105 +125,88 @@ export function drawWheel(
     });
     g.appendChild(slice);
 
-    // Curved label path in <defs>
+    // Curved label path (always the same direction; we’ll flip the TEXT on bottom half)
     const id = `labelPath${idx}`;
-    const mid = (a0 + a1) / 2;
     const labelR = rOuter - labelInset;
+    const la0 = a0 + labelPadDeg;
+    const la1 = a1 - labelPadDeg;
 
-    // Trim ends so text doesn't hit the corners
-    let la0 = a0 + labelPadDeg;
-    let la1 = a1 - labelPadDeg;
-
-    // Keep text upright: if mid-angle upside-down (90..270), reverse path direction
-    const upsideDown = (mid > 90 && mid < 270);
-    if (upsideDown) [la0, la1] = [la1, la0];
-
-    const pathForText = el('path', {
-      id,
-      d: arcPath(labelR, la0, la1),
-      fill: 'none',
-      stroke: 'none'
-    });
+    const pathForText = el('path', { id, d: arcPath(labelR, la0, la1), fill: 'none', stroke: 'none' });
     defs.appendChild(pathForText);
 
-    // Text-on-a-path (centered)
+    // Text-on-a-path centred
     const t = el('text', { class: 'arc-label' });
-    const tp = el('textPath', {
-      href: `#${id}`,
-      'startOffset': '50%' // center text on the arc
-    });
+    const tp = el('textPath', { 'startOffset': '50%' });
+    // xlink:href for Safari, href for modern browsers
+    (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${id}`);
+    tp.setAttribute('href', `#${id}`);
     tp.textContent = seg.key;
     t.appendChild(tp);
-    // Important: let clicks pass through to the slice
-    (t as any).style.pointerEvents = 'none';
+    (t as any).style.pointerEvents = 'none'; // let clicks hit the slice
+
+    // Keep text upright: rotate 180° around the label midpoint for the bottom half
+    const upsideDown = (mid > 90 && mid < 270);
+    if (upsideDown) {
+      const m = polar(labelR, mid);
+      t.setAttribute('transform', `rotate(180 ${m.x.toFixed(2)} ${m.y.toFixed(2)})`);
+    }
+
     g.appendChild(t);
 
-    // Number badge (2..7) near outer rim on mid-angle
-    const badgeAngle = mid;
-    const bPos = polar(rOuter + badgeOffset, badgeAngle);
-    const badge = el('circle', {
-      cx: bPos.x.toFixed(2),
-      cy: bPos.y.toFixed(2),
-      r: String(badgeRadius),
-      class: 'badge'
-    });
-    // No pointer events so slice receives the click
+    // Fit long labels to arc length (reduce font-size down to 8px)
+    fitTextToPath(t, pathForText, 10, 8);
+
+    // Number badge 2..7 just outside rim on mid-angle
+    const bPos = polar(rOuter + badgeOffset, mid);
+    const badge = el('circle', { cx: bPos.x.toFixed(2), cy: bPos.y.toFixed(2), r: String(badgeRadius), class: 'badge' });
     (badge as any).style.pointerEvents = 'none';
     g.appendChild(badge);
-
-    const bText = el('text', {
-      x: bPos.x.toFixed(2),
-      y: bPos.y.toFixed(2),
-      class: 'badge-text'
-    });
-    bText.textContent = String(idx + 2); // 2..7
+    const bText = el('text', { x: bPos.x.toFixed(2), y: bPos.y.toFixed(2), class: 'badge-text' });
+    bText.textContent = String(idx + 2);
     (bText as any).style.pointerEvents = 'none';
     g.appendChild(bText);
   });
 
-  // Center circle
+  // Radial separators (rounded white lines between slices)
+  for (let i = 0; i < segments.length; i++) {
+    const a = start + i * step;
+    const p0 = polar(rInner + 2, a);
+    const p1 = polar(rOuter - 2, a);
+    const sep = el('line', {
+      x1: p0.x.toFixed(2), y1: p0.y.toFixed(2),
+      x2: p1.x.toFixed(2), y2: p1.y.toFixed(2),
+      class: 'separator'
+    });
+    sep.style.pointerEvents = 'none';
+    g.appendChild(sep);
+  }
+
+  // Center circle & label
   const centerCircle = el('circle', {
     cx: String(cx), cy: String(cy), r: String(rCenter),
-    fill: 'url(#centerGrad)', stroke: 'white', 'stroke-width': '1.25'
+    fill: 'url(#centerGrad)', stroke: '#fff', 'stroke-width': '1.25'
   });
   centerCircle.style.cursor = 'pointer';
   centerCircle.addEventListener('click', (evt) => onSelect(center.key, evt));
   g.appendChild(centerCircle);
 
-  // Center label
-  const cLabel = el('text', {
-    x: String(cx), y: String(cy),
-    class: 'center-label', 'text-anchor': 'middle'
-  });
+  const cLabel = el('text', { x: String(cx), y: String(cy), class: 'center-label', 'text-anchor': 'middle' });
   cLabel.textContent = 'The Individual';
   (cLabel as any).style.pointerEvents = 'none';
   g.appendChild(cLabel);
 
-  // Center badge "1" near the top of the center circle
-  const cBadgePos = polar(rCenter - 12, -90); // inside, at 12 o'clock
-  const cBadge = el('circle', {
-    cx: cBadgePos.x.toFixed(2),
-    cy: cBadgePos.y.toFixed(2),
-    r: String(9),
-    class: 'badge'
-  });
+  // “1” badge inside center at 12 o’clock
+  const cBadgePos = polar(rCenter - 12, -90);
+  const cBadge = el('circle', { cx: cBadgePos.x.toFixed(2), cy: cBadgePos.y.toFixed(2), r: '9', class: 'badge' });
   (cBadge as any).style.pointerEvents = 'none';
   g.appendChild(cBadge);
-
-  const cNum = el('text', {
-    x: cBadgePos.x.toFixed(2),
-    y: cBadgePos.y.toFixed(2),
-    class: 'badge-text'
-  });
+  const cNum = el('text', { x: cBadgePos.x.toFixed(2), y: cBadgePos.y.toFixed(2), class: 'badge-text' });
   cNum.textContent = '1';
   (cNum as any).style.pointerEvents = 'none';
   g.appendChild(cNum);
 
   // --- helpers ---
-  function el<K extends keyof SVGElementTagNameMap>(
-    name: K,
-    attrs: Record<string, string> = {}
-  ) {
+  function el<K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string> = {}) {
     const node = document.createElementNS(NS, name);
     for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
     return node;
@@ -230,5 +219,18 @@ export function drawWheel(
     const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + Math.round(255 * amt)));
     const b = Math.min(255, Math.max(0, (n & 0xff) + Math.round(255 * amt)));
     return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
+  }
+
+  function fitTextToPath(textEl: SVGTextElement, pathEl: SVGPathElement, maxPx = 10, minPx = 8) {
+    const pathLen = pathEl.getTotalLength() - 6; // small safety pad
+    let size = maxPx;
+    (textEl.style as any).fontSize = `${size}px`;
+    // If too long, shrink until it fits
+    for (let i = 0; i < 8; i++) {
+      const tLen = textEl.getComputedTextLength();
+      if (tLen <= pathLen || size <= minPx) break;
+      size -= 0.5;
+      (textEl.style as any).fontSize = `${size}px`;
+    }
   }
 }

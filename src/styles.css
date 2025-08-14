@@ -97,3 +97,40 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helve
   text-anchor: middle;
   dominant-baseline: central;
 }
+/* Wheel visuals */
+#policy-wheel { display: block; max-width: 560px; margin: 0 auto; }
+#policy-wheel .seg { transition: filter .18s ease, stroke-width .18s ease; }
+#policy-wheel .seg:hover { filter: brightness(1.06) saturate(1.02); }
+#policy-wheel .seg.active { stroke-width: 2.25; filter: drop-shadow(0 0 6px rgba(0,0,0,.24)); }
+
+/* Curved text along arc */
+#policy-wheel .arc-label {
+  font: 600 10px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(0,0,0,.28);
+  stroke-width: .9px;
+  letter-spacing: .1px;
+}
+
+/* Center label */
+#policy-wheel .center-label {
+  font: 700 12px/1.15 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  fill: #fff;
+  dominant-baseline: middle;
+  text-anchor: middle;
+  text-shadow: 0 1px 0 rgba(0,0,0,.16);
+}
+
+/* Number badges */
+#policy-wheel .badge { fill: #fff; stroke: rgba(0,0,0,.12); stroke-width: 1; }
+#policy-wheel .badge-text {
+  font: 700 8.5px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  fill: #333;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* White separators and inner ring */
+#policy-wheel .separator { stroke: #fff; stroke-width: 6; stroke-linecap: round; }
+
