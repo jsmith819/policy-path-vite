@@ -7,12 +7,31 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
   el.textContent = tokenMap.updatedAt ? 'Last updated: ' + new Date(tokenMap.updatedAt).toLocaleString() : 'Last updated: Never';
 }
 
-export function renderPolicies(segmentName: string, policies: string[], onClick: (policy: string) => void, color: string) {
+// At top (near other helpers)
+const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
+
+// ...
+
+export function renderPolicies(
+  _segmentName: string,
+  policies: string[],
+  onClick: (policy: string) => void,
+  color: string
+) {
   const listEl = document.getElementById('policies-list');
   if (!listEl) return;
-  listEl.innerHTML = policies.map(p => `<div class="policy-item" style="background:${color};" data-policy="${p.replace(/'/g, "\'")}">${p}</div>`).join('');
-  listEl.querySelectorAll('.policy-item').forEach(item => {
-    item.addEventListener('click', () => onClick((item as HTMLElement).dataset.policy!));
+
+  listEl.innerHTML = '';
+  policies.forEach(p => {
+    const display = stripNumberPrefix(p); // <— show without leading numbers
+    const div = document.createElement('div');
+    div.className = 'policy-item';
+    div.style.background = color;
+    div.textContent = display;            // <— display label
+    div.title = p;                        // tooltip shows the full title
+    div.dataset.policy = p;               // keep original for mapping
+    div.addEventListener('click', () => onClick(p)); // pass original to loader
+    listEl.appendChild(div);
   });
 }
 
