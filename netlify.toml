@@ -1,21 +1,16 @@
 [build]
-  command = "npm ci && npm run build && cp template_contextualising.html dist/ && cp 1_the_individual_tokenised.html dist/"
+  command = "npm ci && npm run build"
   publish = "dist"
 
-# If you want a branch-specific build
 [context."hardening"]
-  command = "HARDENING=1 npm ci && npm run build"
+  command = "HARDENING=1 npm ci && npm run build && cp ./template_contextualising.html ./dist/ && cp ./1_the_individual_tokenised.html ./dist/"
 
-# Security headers (this file only exists in your hardening branch)
+# (keep your headers as-is)
 [[headers]]
   for = "/*"
   [headers.values]
-    # Start report-only so you can see violations without breaking the UI
     Content-Security-Policy-Report-Only = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data: blob: https:; font-src 'self' https:; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; script-src 'self'; upgrade-insecure-requests"
-
-    # Don’t let this preview be indexed
     X-Robots-Tag = "noindex, nofollow"
-
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Content-Type-Options = "nosniff"
     Permissions-Policy = "geolocation=(), microphone=(), camera=()"
