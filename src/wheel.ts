@@ -93,8 +93,8 @@ export function drawWheel(
   g.appendChild(innerRing);
 
   // Draw wedges
-  const start = -90;
   const step  = 360 / segments.length;
+  const start = -90 - step / 2;
 
   segments.forEach((seg, idx) => {
     const a0  = start + idx*step;
@@ -143,15 +143,28 @@ export function drawWheel(
     // Number badge **inside** the slice near the rim
     const bPos = polar(rOuter - badgeInboard, mid);
     const badge = el('circle', {
-      cx: bPos.x.toFixed(2), cy: bPos.y.toFixed(2), r: String(badgeRadius), class: 'badge'
+      cx: bPos.x.toFixed(2),
+      cy: bPos.y.toFixed(2),
+      r: String(badgeRadius),
+      class: 'badge'
     });
-    (badge as any).style.pointerEvents = 'none';
-    g.appendChild(badge);
+  // NEW: tint & contrast
+const badgeFill   = shade(seg.color, 0.30);   // 30% lighter than the slice
+const badgeStroke = shade(seg.color, -0.15);  // slightly darker outline
+(badge.style as any).fill   = badgeFill;
+(badge.style as any).stroke = badgeStroke;
+(badge as any).style.pointerEvents = 'none';
+g.appendChild(badge);
 
-    const bText = el('text', { x: bPos.x.toFixed(2), y: bPos.y.toFixed(2), class: 'badge-text' });
-    bText.textContent = String(idx + 2); // 2..7
-    (bText as any).style.pointerEvents = 'none';
-    g.appendChild(bText);
+const bText = el('text', {
+  x: bPos.x.toFixed(2),
+  y: bPos.y.toFixed(2),
+  class: 'badge-text'
+});
+bText.textContent = String(idx + 2);
+(bText.style as any).fill = contrastColor(badgeFill); // readable (auto white/charcoal)
+(bText as any).style.pointerEvents = 'none';
+g.appendChild(bText);
   });
 
   // White separators between slices (rounded)
@@ -184,7 +197,11 @@ export function drawWheel(
   cNum.textContent = '1';
   (cNum as any).style.pointerEvents = 'none';
   g.appendChild(cNum);
-
+  const cBadgeFill   = shade(center.color, 0.30);
+  const cBadgeStroke = shade(center.color, -0.15);
+  (cBadge.style as any).fill   = cBadgeFill;
+  (cBadge.style as any).stroke = cBadgeStroke;
+  (cNum.style   as any).fill   = contrastColor(cBadgeFill);
   // ---- helpers ----
   function el<K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string,string> = {}) {
     const node = document.createElementNS(NS, name);
@@ -199,7 +216,16 @@ export function drawWheel(
     const b = Math.min(255, Math.max(0, ( n     &0xff) + Math.round(255*amt)));
     return `#${(r<<16 | g<<8 | b).toString(16).padStart(6,'0')}`;
   }
-
+  function contrastColor(hex: string) {
+    // Return '#333' for light fills, '#fff' for dark fills (sRGB-relative luminance)
+    const to = (s: string) => parseInt(s, 16) / 255;
+    const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    const r = lin(to(hex.slice(1, 3)));
+    const g = lin(to(hex.slice(3, 5)));
+    const b = lin(to(hex.slice(5, 7)));
+    const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return L > 0.55 ? '#333' : '#fff';
+  }
   function fitTextToPath(textEl: SVGTextElement, pathEl: SVGPathElement, maxPx=10, minPx=8) {
     const pathLen = pathEl.getTotalLength() - 6; // small safety margin
     let size = maxPx;
