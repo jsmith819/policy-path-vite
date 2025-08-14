@@ -2,6 +2,23 @@ import type { ChangeLogEntry, TokenMap } from './types';
 import { filenameFor, fetchDocumentHtml } from './api';
 import DOMPurify from 'dompurify';
 
+/**
+ * Special documents that don't come from the usual <segment/policy> mapping.
+ * These files already exist in the repo at the site root.
+ */
+const SPECIAL_DOC_BY_POLICY: Record<string, string> = {
+  'Commitment Statement': '/template_contextualising.html',
+  'All procedures (22)': '/1_the_individual_tokenised.html'
+};
+
+/** Fetch a static HTML file by path (for SPECIAL_DOC_BY_POLICY entries). */
+async function fetchSpecialHtml(path: string): Promise<string> {
+  const res = await fetch(path, { credentials: 'same-origin' });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${path}`);
+  // Some hosts might not set content-type strictly; we accept the body as text regardless.
+  return await res.text();
+}
+
 /** Sanitize any HTML we inject into the page */
 export function safeHTML(html: string): string {
   return DOMPurify.sanitize(html, {
@@ -43,6 +60,8 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
 /**
  * Renders the clickable list of policies for a segment.
  * Uses real DOM nodes (not string concat) to avoid accidental HTML injection.
+ * Adds an optional modifier class for the "All procedures (22)" chip so you
+ * can style it differently if you want (e.g., dashed border).
  */
 export function renderPolicies(
   _segmentName: string,
@@ -56,7 +75,8 @@ export function renderPolicies(
   listEl.innerHTML = '';
   policies.forEach(p => {
     const div = document.createElement('div');
-    div.className = 'policy-item';
+    const isExtra = p === 'All procedures (22)'; // visual hint only
+    div.className = 'policy-item' + (isExtra ? ' policy-item--extra' : '');
     div.style.background = color;
     div.textContent = p;
     div.dataset.policy = p;
@@ -115,6 +135,9 @@ export function replaceTokens(html: string, tokenMap: TokenMap) {
 /**
  * Fetches the HTML for a segment/policy, token-replaces, sanitizes and renders.
  * Also rebuilds the "Updates" panel for this document.
+ * - SPECIAL cases ("Commitment Statement", "All procedures (22)") load
+ *   directly from static HTML files at the site root.
+ * - All other policies use filenameFor(...) + fetchDocumentHtml(...).
  */
 export async function loadAndRender(
   segment: string,
@@ -126,8 +149,12 @@ export async function loadAndRender(
   setText(docEl, 'Loading…');
 
   try {
-    const fileName  = filenameFor(segment, policy);
-    const html      = await fetchDocumentHtml(fileName);
+    const specialPath = SPECIAL_DOC_BY_POLICY[policy];
+
+    const html = specialPath
+      ? await fetchSpecialHtml(specialPath)
+      : await fetchDocumentHtml(filenameFor(segment, policy));
+
     const tokenised = replaceTokens(html, tokenMap);
 
     if (docEl) docEl.innerHTML = safeHTML(tokenised);

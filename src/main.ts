@@ -11,16 +11,32 @@ let currentUsername: string | null = null;
 let tokenMap: TokenMap = loadTokenMap();
 let changeLog: ChangeLogEntry[] = loadChangeLog();
 
+// Expose for quick debugging in the browser console (unchanged)
 (Object.assign(window as any, { tokenMap, changeLog }));
 
+/**
+ * UPDATED:
+ * - "1. The Individual" now has the full set of ten policies from your board
+ *   (keeps "Commitment Statement") and adds "All procedures (22)" at the end.
+ * - Other segments unchanged (fill out later as needed).
+ */
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
     'Commitment Statement',
-    '1.1 Person-centred care',
-    '1.2 Dignity, respect and privacy',
-    '1.3 Choice, independence and quality of life',
-    '1.4 Transparency and agreements'
+    '1.1 Person-centred and Culturally Safe Care',
+    '1.2 Trauma-aware and Healing-informed Practice',
+    '1.3 Diversity, Inclusion and Belonging',
+    '1.4 Dignity, Respect and Professional Boundaries',
+    '1.5 Privacy, Confidentiality and Communication',
+    '1.6 Supported Decision-Making and Informed Consent',
+    '1.7 Dignity-of-risk and Positive Risk-taking',
+    '1.8 Resident Advocacy and Interpreter Services',
+    '1.9 Transparency, Care Agreements and Financial Information',
+    '1.10 Resident Engagement and Co-design',
+    'All procedures (22)'
   ],
+
+  // Leave these as-is for now (you can expand later)
   'The organisation': ['2.1 Partnering with individuals', '2.2 Quality, safety & inclusion'],
   'Care and services': ['3.1 Assessment & planning', '3.2 Delivery of services'],
   'The environment': ['4.1a Services in home', '4.1b Services outside home'],
@@ -172,9 +188,17 @@ const policyColorsLocal = policyColors;
 function selectSegment(segmentName: string, evt: Event) {
   document.querySelectorAll('#policy-wheel path, #policy-wheel circle').forEach(el => el.classList.remove('active'));
   (evt.currentTarget as Element)?.classList.add('active');
+
   const policies = policiesDataLocal[segmentName] || [];
   const color = policyColorsLocal[segmentName] || '#1c2b4a';
-  renderPolicies(segmentName, policies, (policy) => { loadAndRender(segmentName, policy, tokenMap, changeLog); }, color);
+
+  renderPolicies(
+    segmentName,
+    policies,
+    (policy) => { loadAndRender(segmentName, policy, tokenMap, changeLog); },
+    color
+  );
+
   const first = policies[0];
   const docEl = document.getElementById('docContent');
   if (docEl) docEl.textContent = first ? 'Loading…' : 'Select a policy';
