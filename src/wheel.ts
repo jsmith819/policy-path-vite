@@ -1,54 +1,55 @@
 // src/wheel.ts
+// Draws the 7-piece wheel with curved text along each slice & small number badges.
+
+const NS = 'http://www.w3.org/2000/svg';
+
 export function drawWheel(
   svg: SVGSVGElement,
   onSelect: (segmentName: string, evt: Event) => void
 ) {
-  // Wipe previous drawing
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-  // Consistent canvas
+  // Canvas / geometry
   svg.setAttribute('viewBox', '0 0 320 320');
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.style.width = '100%';
   svg.style.height = '100%';
 
   const cx = 160, cy = 160;
-  const rOuter = 140;
-  const rInner = 82;          // donut thickness
-  const rCenter = 58;
+  const rOuter = 140;     // outer radius of donut
+  const rInner = 82;      // inner radius of donut
+  const rCenter = 58;     // center circle radius
 
-  // Segment palette (keeps your existing colours)
+  // Label arc positioning
+  const labelInset = 14;  // pixels inward from outer rim where the label path sits
+  const labelPadDeg = 10; // trim degrees at both ends so text doesn't collide with corners
+
+  // Badges (small numbers on slices)
+  const badgeRadius = 10;
+  const badgeOffset = 6;  // how far outside the rim the badge sits
+
+  // Segments (keep keys exactly matching what main.ts expects)
   const segments: { key: string; color: string }[] = [
-    { key: 'The organisation',          color: '#6aaf4b' },
-    { key: 'Care and services',         color: '#7e5aa2' },
-    { key: 'The environment',           color: '#29335c' },
-    { key: 'Clinical care',             color: '#29a9c7' },
-    { key: 'Food and nutrition',        color: '#f18f01' },
-    { key: 'Residential community',     color: '#faa916' }
+    { key: 'The organisation',      color: '#6aaf4b' },
+    { key: 'Care and services',     color: '#7e5aa2' },
+    { key: 'The environment',       color: '#29335c' },
+    { key: 'Clinical care',         color: '#29a9c7' },
+    { key: 'Food and nutrition',    color: '#f18f01' },
+    { key: 'Residential community', color: '#faa916' }
   ];
   const center = { key: '1. The Individual', color: '#e94e77' };
 
-  // --- defs: gradients + soft shadow
-  const defs = svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'defs'));
+  // --- defs: drop shadow + gradients + (later) label paths
+  const defs = svg.appendChild(el('defs'));
 
-  const drop = document.createElementNS(svg.namespaceURI, 'filter');
-  drop.setAttribute('id', 'softDrop');
-  drop.innerHTML = `
-    <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="rgba(0,0,0,.25)" />
-  `;
+  const drop = el('filter', { id: 'softDrop' });
+  drop.innerHTML = `<feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="rgba(0,0,0,.25)" />`;
   defs.appendChild(drop);
 
   const mkGrad = (id: string, base: string) => {
-    const grad = document.createElementNS(svg.namespaceURI, 'linearGradient');
-    grad.setAttribute('id', id);
-    grad.setAttribute('x1', '0%');
-    grad.setAttribute('y1', '0%');
-    grad.setAttribute('x2', '100%');
-    grad.setAttribute('y2', '100%');
+    const grad = el('linearGradient', { id, x1: '0%', y1: '0%', x2: '100%', y2: '100%' });
     const stop = (o: number, col: string) => {
-      const s = document.createElementNS(svg.namespaceURI, 'stop');
-      s.setAttribute('offset', `${o * 100}%`);
-      s.setAttribute('stop-color', col);
+      const s = el('stop', { offset: `${o * 100}%`, 'stop-color': col });
       grad.appendChild(s);
     };
     stop(0, shade(base, 0.12));
@@ -59,36 +60,39 @@ export function drawWheel(
   segments.forEach((s, i) => mkGrad(`segGrad${i}`, s.color));
   mkGrad('centerGrad', center.color);
 
-  // Root group with a little breathing room
-  const g = svg.appendChild(document.createElementNS(svg.namespaceURI, 'g'));
-  g.setAttribute('filter', 'url(#softDrop)');
-
-  // Helpers
+  // Utility fns
   const toRad = (deg: number) => (Math.PI / 180) * deg;
-  const arc = (
-    r: number,
-    a0: number,
-    a1: number
-  ) => {
+  const polar = (r: number, aDeg: number) =>
+    ({ x: cx + r * Math.cos(toRad(aDeg)), y: cy + r * Math.sin(toRad(aDeg)) });
+
+  const arcPath = (r: number, a0: number, a1: number) => {
     const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
-    const p0 = { x: cx + r * Math.cos(toRad(a0)), y: cy + r * Math.sin(toRad(a0)) };
-    const p1 = { x: cx + r * Math.cos(toRad(a1)), y: cy + r * Math.sin(toRad(a1)) };
-    return { p0, p1, large };
+    const p0 = polar(r, a0);
+    const p1 = polar(r, a1);
+    return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
   };
+
   const donutPath = (a0: number, a1: number) => {
     // outer arc (a0->a1), then inner arc back (a1->a0)
-    const o = arc(rOuter, a0, a1);
-    const i = arc(rInner, a1, a0);
+    const largeOuter = Math.abs(a1 - a0) > 180 ? 1 : 0;
+    const po0 = polar(rOuter, a0);
+    const po1 = polar(rOuter, a1);
+    const pi0 = polar(rInner, a1);
+    const pi1 = polar(rInner, a0);
+    const largeInner = largeOuter; // same span
     return [
-      `M ${o.p0.x.toFixed(2)} ${o.p0.y.toFixed(2)}`,
-      `A ${rOuter} ${rOuter} 0 ${o.large} 1 ${o.p1.x.toFixed(2)} ${o.p1.y.toFixed(2)}`,
-      `L ${i.p0.x.toFixed(2)} ${i.p0.y.toFixed(2)}`,
-      `A ${rInner} ${rInner} 0 ${i.large} 0 ${i.p1.x.toFixed(2)} ${i.p1.y.toFixed(2)}`,
+      `M ${po0.x.toFixed(2)} ${po0.y.toFixed(2)}`,
+      `A ${rOuter} ${rOuter} 0 ${largeOuter} 1 ${po1.x.toFixed(2)} ${po1.y.toFixed(2)}`,
+      `L ${pi0.x.toFixed(2)} ${pi0.y.toFixed(2)}`,
+      `A ${rInner} ${rInner} 0 ${largeInner} 0 ${pi1.x.toFixed(2)} ${pi1.y.toFixed(2)}`,
       'Z'
     ].join(' ');
   };
 
-  // Draw 6 equal segments around -90° start (top)
+  // Root group
+  const g = svg.appendChild(el('g', { filter: 'url(#softDrop)' }));
+
+  // Draw 6 equal slices around -90° start (12 o'clock)
   const start = -90;
   const step = 360 / segments.length;
 
@@ -96,65 +100,129 @@ export function drawWheel(
     const a0 = start + idx * step;
     const a1 = a0 + step;
 
-    const path = document.createElementNS(svg.namespaceURI, 'path');
-    path.setAttribute('d', donutPath(a0, a1));
-    path.setAttribute('fill', `url(#segGrad${idx})`);
-    path.setAttribute('stroke', 'rgba(255,255,255,0.95)');
-    path.setAttribute('stroke-width', '1.25');
-    path.classList.add('seg');
-    path.setAttribute('tabindex', '0');
-    path.setAttribute('role', 'button');
-    path.setAttribute('data-name', seg.key);
-    path.setAttribute('aria-label', seg.key);
-    path.style.cursor = 'pointer';
-
-    path.addEventListener('click', (evt) => onSelect(seg.key, evt));
-    path.addEventListener('keypress', (evt: any) => {
+    // Slice body
+    const slice = el('path', {
+      d: donutPath(a0, a1),
+      fill: `url(#segGrad${idx})`,
+      stroke: 'rgba(255,255,255,0.95)',
+      'stroke-width': '1.25',
+      tabindex: '0',
+      role: 'button',
+      'data-name': seg.key,
+      'aria-label': seg.key
+    });
+    slice.style.cursor = 'pointer';
+    slice.classList.add('seg');
+    slice.addEventListener('click', (evt) => onSelect(seg.key, evt));
+    slice.addEventListener('keypress', (evt: any) => {
       if (evt.key === 'Enter' || evt.key === ' ') onSelect(seg.key, evt);
     });
+    g.appendChild(slice);
 
-    g.appendChild(path);
-
-    // Label at mid-angle
+    // Curved label path in <defs>
+    const id = `labelPath${idx}`;
     const mid = (a0 + a1) / 2;
-    const rx = cx + ((rInner + rOuter) / 2) * Math.cos(toRad(mid));
-    const ry = cy + ((rInner + rOuter) / 2) * Math.sin(toRad(mid));
+    const labelR = rOuter - labelInset;
 
-    const label = document.createElementNS(svg.namespaceURI, 'text');
-    label.setAttribute('x', rx.toFixed(2));
-    label.setAttribute('y', ry.toFixed(2));
-    label.setAttribute('text-anchor', 'middle');
-    label.setAttribute('dominant-baseline', 'middle');
-    label.classList.add('seg-label');
-    label.textContent = seg.key;
-    // rotate legibility: keep upright-ish
-    const rot = mid + 90;
-    label.setAttribute('transform', `rotate(${rot.toFixed(1)} ${rx.toFixed(2)} ${ry.toFixed(2)})`);
-    g.appendChild(label);
+    // Trim ends so text doesn't hit the corners
+    let la0 = a0 + labelPadDeg;
+    let la1 = a1 - labelPadDeg;
+
+    // Keep text upright: if mid-angle upside-down (90..270), reverse path direction
+    const upsideDown = (mid > 90 && mid < 270);
+    if (upsideDown) [la0, la1] = [la1, la0];
+
+    const pathForText = el('path', {
+      id,
+      d: arcPath(labelR, la0, la1),
+      fill: 'none',
+      stroke: 'none'
+    });
+    defs.appendChild(pathForText);
+
+    // Text-on-a-path (centered)
+    const t = el('text', { class: 'arc-label' });
+    const tp = el('textPath', {
+      href: `#${id}`,
+      'startOffset': '50%' // center text on the arc
+    });
+    tp.textContent = seg.key;
+    t.appendChild(tp);
+    // Important: let clicks pass through to the slice
+    (t as any).style.pointerEvents = 'none';
+    g.appendChild(t);
+
+    // Number badge (2..7) near outer rim on mid-angle
+    const badgeAngle = mid;
+    const bPos = polar(rOuter + badgeOffset, badgeAngle);
+    const badge = el('circle', {
+      cx: bPos.x.toFixed(2),
+      cy: bPos.y.toFixed(2),
+      r: String(badgeRadius),
+      class: 'badge'
+    });
+    // No pointer events so slice receives the click
+    (badge as any).style.pointerEvents = 'none';
+    g.appendChild(badge);
+
+    const bText = el('text', {
+      x: bPos.x.toFixed(2),
+      y: bPos.y.toFixed(2),
+      class: 'badge-text'
+    });
+    bText.textContent = String(idx + 2); // 2..7
+    (bText as any).style.pointerEvents = 'none';
+    g.appendChild(bText);
   });
 
   // Center circle
-  const c = document.createElementNS(svg.namespaceURI, 'circle');
-  c.setAttribute('cx', String(cx));
-  c.setAttribute('cy', String(cy));
-  c.setAttribute('r', String(rCenter));
-  c.setAttribute('fill', 'url(#centerGrad)');
-  c.setAttribute('stroke', 'white');
-  c.setAttribute('stroke-width', '1.25');
-  c.style.cursor = 'pointer';
-  c.addEventListener('click', (evt) => onSelect(center.key, evt));
-  g.appendChild(c);
+  const centerCircle = el('circle', {
+    cx: String(cx), cy: String(cy), r: String(rCenter),
+    fill: 'url(#centerGrad)', stroke: 'white', 'stroke-width': '1.25'
+  });
+  centerCircle.style.cursor = 'pointer';
+  centerCircle.addEventListener('click', (evt) => onSelect(center.key, evt));
+  g.appendChild(centerCircle);
 
-  const cLabel = document.createElementNS(svg.namespaceURI, 'text');
-  cLabel.setAttribute('x', String(cx));
-  cLabel.setAttribute('y', String(cy));
-  cLabel.setAttribute('text-anchor', 'middle');
-  cLabel.setAttribute('dominant-baseline', 'middle');
-  cLabel.classList.add('center-label');
+  // Center label
+  const cLabel = el('text', {
+    x: String(cx), y: String(cy),
+    class: 'center-label', 'text-anchor': 'middle'
+  });
   cLabel.textContent = 'The Individual';
+  (cLabel as any).style.pointerEvents = 'none';
   g.appendChild(cLabel);
 
-  // Small utility: lighten/darken a hex
+  // Center badge "1" near the top of the center circle
+  const cBadgePos = polar(rCenter - 12, -90); // inside, at 12 o'clock
+  const cBadge = el('circle', {
+    cx: cBadgePos.x.toFixed(2),
+    cy: cBadgePos.y.toFixed(2),
+    r: String(9),
+    class: 'badge'
+  });
+  (cBadge as any).style.pointerEvents = 'none';
+  g.appendChild(cBadge);
+
+  const cNum = el('text', {
+    x: cBadgePos.x.toFixed(2),
+    y: cBadgePos.y.toFixed(2),
+    class: 'badge-text'
+  });
+  cNum.textContent = '1';
+  (cNum as any).style.pointerEvents = 'none';
+  g.appendChild(cNum);
+
+  // --- helpers ---
+  function el<K extends keyof SVGElementTagNameMap>(
+    name: K,
+    attrs: Record<string, string> = {}
+  ) {
+    const node = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
+
   function shade(hex: string, amt: number) {
     const c = hex.replace('#', '');
     const n = parseInt(c, 16);
