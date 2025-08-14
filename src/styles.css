@@ -38,3 +38,25 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helve
 .popup input { width: 100%; margin-bottom: 0.5rem; padding: 6px; }
 .popup button { padding: 0.5rem 1rem; background: #1c2b4a; color: white; border: none; cursor: pointer; }
 .scroll { max-height: 400px; overflow-y: auto; }
+/* Improved wheel visuals */
+#policy-wheel { display: block; max-width: 540px; margin: 0 auto; }
+
+#policy-wheel .seg { transition: transform .18s ease, filter .18s ease, stroke-width .18s ease; }
+#policy-wheel .seg:hover { filter: brightness(1.06) saturate(1.02); }
+#policy-wheel .seg.active { stroke-width: 2.25; filter: drop-shadow(0 0 6px rgba(0,0,0,.25)); }
+
+#policy-wheel .seg-label {
+  font: 600 8.5px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(0,0,0,.28);
+  stroke-width: .9px;
+  pointer-events: none; /* click goes to the segment path */
+}
+
+#policy-wheel .center-label {
+  font: 700 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  fill: #fff;
+  text-shadow: 0 1px 0 rgba(0,0,0,.16);
+  pointer-events: none;
+}
