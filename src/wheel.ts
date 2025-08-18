@@ -22,14 +22,14 @@ export function drawWheel(
   const rCenter = 58;  // centre circle radius
 
   // Put label path very close to the rim so it "hugs" the outer curve
-  const labelInset  = 6;  // << was 12
+  const labelInset  = 6;    // (was 12)
   const labelPadDeg = 8;
 
   // Corner triangle sizing
   const triRadialDepth = 14;
   const triSweepDeg    = 10;
 
-  // Segments (keys must match main.ts)
+  // Segments (keys must match main.ts policiesData keys)
   const segments: { key: string; color: string }[] = [
     { key: 'The organisation',      color: '#6aaf4b' },
     { key: 'Care and services',     color: '#7e5aa2' },
@@ -39,15 +39,16 @@ export function drawWheel(
     { key: 'Residential community', color: '#faa916' }
   ];
   const center = { key: '1. The Individual', color: '#e94e77' };
-// Labels you want inverted (rendered the opposite way along the arc)
-const invertLabelByKey: Record<string, boolean> = {
-  'The organisation': false,
-  'Care and services': false,
-  'The environment': false,
-  'Clinical care': true,
-  'Food and nutrition': false,
-  'Residential community': true
-};
+
+  // Labels you want inverted (rendered the opposite way along the arc)
+  const invertLabelByKey: Record<string, boolean> = {
+    'The organisation': false,
+    'Care and services': false,
+    'The environment': false,
+    'Clinical care': true,
+    'Food and nutrition': false,
+    'Residential community': true
+  };
 
   // --- defs ---------------------------------------------------------------
   const defs = svg.appendChild(el('defs'));
@@ -72,14 +73,13 @@ const invertLabelByKey: Record<string, boolean> = {
   const polar = (r: number, aDeg: number) =>
     ({ x: cx + r * Math.cos(toRad(aDeg)), y: cy + r * Math.sin(toRad(aDeg)) });
 
-  // FIXED: compute sweep/large flags from angle direction so we always use the short arc
+  // arc following direction (short/long & sweep computed from angles)
   const arcPath = (r: number, a0: number, a1: number) => {
     const p0 = polar(r, a0), p1 = polar(r, a1);
     let da = a1 - a0;
-    // normalize to [-360, 360] in case of wrap
     if (da > 360) da -= 360; else if (da < -360) da += 360;
     const large = Math.abs(da) > 180 ? 1 : 0;
-    const sweep = da >= 0 ? 1 : 0; // positive delta -> sweep=1, negative -> sweep=0
+    const sweep = da >= 0 ? 1 : 0;
     return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} ${sweep} ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
   };
 
@@ -117,15 +117,19 @@ const invertLabelByKey: Record<string, boolean> = {
     textEl.setAttribute('textLength', Math.max(0, pathLen).toFixed(0));
   }
 
-  // --- root group & inner ring -------------------------------------------
+  // --- root group & layers (controls stacking order) ---------------------
   const g = svg.appendChild(el('g', { filter: 'url(#softDrop)' }));
+  const gSlices = g.appendChild(el('g')); // wedges + inner ring
+  const gSeps   = g.appendChild(el('g')); // white separators
+  const gLabels = g.appendChild(el('g')); // labels + triangles + numbers (topmost)
 
+  // Inner white ring between slices and centre
   const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: String(rInner - 1) });
   innerRing.setAttribute('fill', 'none');
   innerRing.setAttribute('stroke', '#fff');
   innerRing.setAttribute('stroke-width', '14');
   innerRing.style.pointerEvents = 'none';
-  g.appendChild(innerRing);
+  gSlices.appendChild(innerRing);
 
   // --- wedges -------------------------------------------------------------
   const step  = 360 / segments.length;
@@ -155,44 +159,40 @@ const invertLabelByKey: Record<string, boolean> = {
     slice.classList.add('seg');
     slice.addEventListener('click', (evt) => onSelect(seg.key, evt));
     slice.addEventListener('keypress', (evt: any) => { if (evt.key === 'Enter' || evt.key === ' ') onSelect(seg.key, evt); });
-    g.appendChild(slice);
+    gSlices.appendChild(slice);
 
-    // Curved label path — always left→right; extra pad on triangle side; hugs outer rim
-// Curved label path — hugs outer rim, extra pad on triangle side
-const labelR = rOuter - labelInset;
-const topHalf = !(mid > 90 && mid < 270);
+    // Curved label path — hugs outer rim, extra pad on triangle side
+    const labelR = rOuter - labelInset;
+    const topHalf = !(mid > 90 && mid < 270);
 
-// extra pad so label avoids the triangle corner
+    // extra pad so label avoids the triangle corner
+    const extraPadAtTriangle = 8;
+    const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
+    const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
 
-const extraPadAtTriangle = 8;
-const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
-const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
+    // Default: keep text upright (top half forward, bottom half reversed)
+    let forward = topHalf;
+    if (invertLabelByKey[seg.key]) forward = !forward;
 
-// Default: keep text upright (top half forward, bottom half reversed)
-let forward = topHalf;
-// Flip only selected segments
-if (invertLabelByKey[seg.key]) forward = !forward;
+    // Build the arc in the chosen direction
+    const L0 = forward ? (a0 + padStart) : (a1 - padEnd);
+    const L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
 
-// Build the arc in the chosen direction
-const L0 = forward ? (a0 + padStart) : (a1 - padEnd);
-const L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+    const pathId = `labelPath${idx}`;
+    const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
+    defs.appendChild(labelPath);
 
-const pathId = `labelPath${idx}`;
-const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
-defs.appendChild(labelPath);
+    const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
+    const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
+    (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
+    tp.setAttribute('href', `#${pathId}`);
+    tp.textContent = seg.key;
+    t.appendChild(tp);
+    (t.style as any).pointerEvents = 'none';
+    gLabels.appendChild(t);
 
-const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
-const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
-(tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
-tp.setAttribute('href', `#${pathId}`);
-tp.textContent = seg.key;
-t.appendChild(tp);
-(t.style as any).pointerEvents = 'none';
-g.appendChild(t);
-
-// Fit to arc
-fitTextToPath(t, labelPath, 10, 8);
-
+    // Fit to arc
+    fitTextToPath(t, labelPath, 10, 8);
 
     // --- Corner triangle with number --------------------------------------
     const cornerAngle   = side === 'start' ? a0 : a1;
@@ -213,7 +213,7 @@ fitTextToPath(t, labelPath, 10, 8);
     (tri.style as any).fill   = triFill;
     (tri.style as any).stroke = triStroke;
     (tri as any).style.pointerEvents = 'none';
-    g.appendChild(tri);
+    gLabels.appendChild(tri);
 
     const tx = (P0.x + P1.x + P2.x) / 3;
     const ty = (P0.y + P1.y + P2.y) / 3;
@@ -221,20 +221,24 @@ fitTextToPath(t, labelPath, 10, 8);
     num.setAttribute('class', 'badge-text');
     num.setAttribute('x', tx.toFixed(2));
     num.setAttribute('y', ty.toFixed(2));
-    num.textContent = String(idx + 2);
+    num.textContent = String(idx + 2); // 2..7
     (num.style as any).fill = contrastColor(triFill);
     (num as any).style.pointerEvents = 'none';
-    g.appendChild(num);
+    gLabels.appendChild(num);
   });
 
-  // White separators
+  // White separators (drawn above slices, below labels)
   for (let i = 0; i < segments.length; i++) {
     const a  = start + i * step;
     const p0 = polar(rInner + 2, a);
     const p1 = polar(rOuter - 2, a);
-    const sep = el('line', { x1: p0.x.toFixed(2), y1: p0.y.toFixed(2), x2: p1.x.toFixed(2), y2: p1.y.toFixed(2), class: 'separator' });
+    const sep = el('line', {
+      x1: p0.x.toFixed(2), y1: p0.y.toFixed(2),
+      x2: p1.x.toFixed(2), y2: p1.y.toFixed(2),
+      class: 'separator'
+    });
     sep.style.pointerEvents = 'none';
-    g.appendChild(sep);
+    gSeps.appendChild(sep);
   }
 
   // Centre circle + label
@@ -244,12 +248,12 @@ fitTextToPath(t, labelPath, 10, 8);
   });
   centerCircle.style.cursor = 'pointer';
   centerCircle.addEventListener('click', (evt) => onSelect(center.key, evt));
-  g.appendChild(centerCircle);
+  gSlices.appendChild(centerCircle);
 
   const cLabel = el('text', { x: String(cx), y: String(cy), class: 'center-label', 'text-anchor': 'middle' });
   cLabel.textContent = 'The Individual';
   (cLabel as any).style.pointerEvents = 'none';
-  g.appendChild(cLabel);
+  gLabels.appendChild(cLabel);
 
   // Centre "1" badge (tinted)
   const cPos = polar(rCenter - 12, -90);
@@ -259,19 +263,19 @@ fitTextToPath(t, labelPath, 10, 8);
   (cBadge.style as any).fill   = cBadgeFill;
   (cBadge.style as any).stroke = cBadgeStroke;
   (cBadge as any).style.pointerEvents = 'none';
-  g.appendChild(cBadge);
+  gLabels.appendChild(cBadge);
 
   const cNum = el('text', { x: cPos.x.toFixed(2), y: cPos.y.toFixed(2), class: 'badge-text' });
   cNum.textContent = '1';
   (cNum.style as any).fill = contrastColor(cBadgeFill);
   (cNum as any).style.pointerEvents = 'none';
-  g.appendChild(cNum);
+  gLabels.appendChild(cNum);
 
   // ---- helpers -----------------------------------------------------------
   function el<K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string> = {}) {
     const node = document.createElementNS(NS, name);
     for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-    return node;
+    return node as SVGElementTagNameMap[K];
   }
 
   function shade(hex: string, amt: number) {
