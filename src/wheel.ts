@@ -163,7 +163,7 @@ const labelR = rOuter - labelInset;
 const topHalf = !(mid > 90 && mid < 270);
 
 // extra pad so label avoids the triangle corner
-const side = cornerSide[idx];                 // 'start' | 'end'
+
 const extraPadAtTriangle = 8;
 const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
 const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
