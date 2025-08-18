@@ -86,18 +86,30 @@ export function drawWheel(
     const pathLen = pathEl.getTotalLength() - 6; // small margin
     let size = maxPx;
     (textEl.style as any).fontSize = `${size}px`;
-    for (let i = 0; i < 10; i++) {
+    (textEl.style as any).letterSpacing = '0px';
+
+    // 1) shrink font
+    for (let i = 0; i < 12; i++) {
       const tLen = textEl.getComputedTextLength();
       if (tLen <= pathLen || size <= minPx) break;
       size -= 0.5;
       (textEl.style as any).fontSize = `${size}px`;
     }
+    // 2) tighten spacing
+    for (let s = 0; s < 8; s++) {
+      const tLen = textEl.getComputedTextLength();
+      if (tLen <= pathLen) return;
+      const cur = parseFloat((textEl.style as any).letterSpacing || '0') || 0;
+      (textEl.style as any).letterSpacing = `${cur - 0.1}px`;
+    }
+    // 3) final clamp: force-fit
+    textEl.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+    textEl.setAttribute('textLength', Math.max(0, pathLen).toFixed(0));
   }
 
   // --- root group & inner ring -------------------------------------------
   const g = svg.appendChild(el('g', { filter: 'url(#softDrop)' }));
 
-  // Inner white ring between slices and centre
   const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: String(rInner - 1) });
   innerRing.setAttribute('fill', 'none');
   innerRing.setAttribute('stroke', '#fff');
@@ -110,7 +122,7 @@ export function drawWheel(
   const step  = 360 / segments.length;
   const start = -90 - step / 2;
 
-  // Which corner of each wedge gets the triangle (start boundary or end boundary)
+  // Which corner gets the triangle (start boundary or end boundary)
   // Order: green, purple, navy, teal, orange, yellow.
   const cornerSide: ('start' | 'end')[] = ['end', 'end', 'end', 'end', 'end', 'end'];
 
@@ -118,6 +130,7 @@ export function drawWheel(
     const a0  = start + idx * step;
     const a1  = a0 + step;
     const mid = (a0 + a1) / 2;
+    const side = cornerSide[idx];
 
     // Slice body
     const slice = el('path', {
@@ -138,18 +151,24 @@ export function drawWheel(
     });
     g.appendChild(slice);
 
-    // Curved label path; always left-to-right. Reverse path on bottom half.
+    // Curved label path — always left→right; add extra pad on triangle side
     const labelR = rOuter - labelInset;
     const topHalf = !(mid > 90 && mid < 270);
-    const L0 = topHalf ? a0 + labelPadDeg : a1 - labelPadDeg;
-    const L1 = topHalf ? a1 - labelPadDeg : a0 + labelPadDeg;
+
+    const extraPadAtTriangle = 8;
+    const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
+    const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
+
+    // reverse direction on bottom half
+    const L0 = topHalf ? (a0 + padStart) : (a1 - padEnd);
+    const L1 = topHalf ? (a1 - padEnd)   : (a0 + padStart);
 
     const pathId = `labelPath${idx}`;
     const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
     defs.appendChild(labelPath);
 
     const t = el('text', { class: 'arc-label' }) as SVGTextElement;
-    const tp = el('textPath', { 'startOffset': '50%' }) as SVGTextPathElement;
+    const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
     (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
     tp.setAttribute('href', `#${pathId}`);
     tp.textContent = seg.key;
@@ -157,24 +176,19 @@ export function drawWheel(
     (t.style as any).pointerEvents = 'none';
     g.appendChild(t);
 
-    // Fit label to available arc length
     fitTextToPath(t, labelPath, 10, 8);
 
     // --- Corner triangle with number (inside the slice) -------------------
-    const side = cornerSide[idx];
     const cornerAngle   = side === 'start' ? a0 : a1;
     const intoWedgeSign = side === 'start' ? +1 : -1;
 
-    const rimR   = rOuter - 1;                 // just inside rim
-    const innerR = rOuter - triRadialDepth;    // radial depth of triangle
+    const rimR   = rOuter - 1;              // just inside rim
+    const innerR = rOuter - triRadialDepth; // radial depth of triangle
 
     // Triangle points:
-    // P0: on the rim at the radial boundary
-    // P1: move inward along that boundary
-    // P2: back near the rim, but moved into the wedge along the arc
-    const P0 = polar(rimR,   cornerAngle);
-    const P1 = polar(innerR, cornerAngle);
-    const P2 = polar(rimR,   cornerAngle + intoWedgeSign * triSweepDeg);
+    const P0 = polar(rimR,   cornerAngle);                            // on rim at boundary
+    const P1 = polar(innerR, cornerAngle);                            // inward on boundary
+    const P2 = polar(rimR,   cornerAngle + intoWedgeSign * triSweepDeg); // into wedge
 
     const tri = document.createElementNS(NS, 'polygon');
     tri.setAttribute('points', `${P0.x.toFixed(2)},${P0.y.toFixed(2)} ${P1.x.toFixed(2)},${P1.y.toFixed(2)} ${P2.x.toFixed(2)},${P2.y.toFixed(2)}`);
@@ -223,7 +237,7 @@ export function drawWheel(
   (cLabel as any).style.pointerEvents = 'none';
   g.appendChild(cLabel);
 
-  // Centre "1" badge (still circular) at 12 o'clock *inside* the centre — tinted
+  // Centre "1" badge (tinted) at 12 o'clock inside the centre
   const cPos = polar(rCenter - 12, -90);
   const cBadge = el('circle', { cx: cPos.x.toFixed(2), cy: cPos.y.toFixed(2), r: '9', class: 'badge' });
   const cBadgeFill   = shade(center.color, 0.20);
