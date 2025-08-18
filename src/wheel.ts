@@ -21,12 +21,13 @@ export function drawWheel(
   const rInner  = 82;  // donut inner radius
   const rCenter = 58;  // centre circle radius
 
-  // Put label path very close to the rim so it "hugs" the outer curve
-  const labelInset  = 6;    // (was 12)
-  const labelPadDeg = 4;
-// NEW: extra breathing room for TOP-half labels
-const topRadialFix = 3;   // px to push top-half labels inward (away from rim)
-const topPadFixDeg = 2;   // extra deg of padding at both ends on the top half
+  // Label path radius control
+  const labelInset  = 6;     // base inset from outer rim
+  const labelPadDeg = 4;     // angular padding at both ends of label arcs
+  // Extra breathing room
+  const topRadialFix = 3;    // push top-half labels further inward (px)
+  const topPadFixDeg = 2;    // add angular pad on top-half labels
+
   // Corner triangle sizing
   const triRadialDepth = 14;
   const triSweepDeg    = 10;
@@ -42,7 +43,7 @@ const topPadFixDeg = 2;   // extra deg of padding at both ends on the top half
   ];
   const center = { key: '1. The Individual', color: '#e94e77' };
 
-  // Labels you want inverted (rendered the opposite way along the arc)
+  // Labels to invert along the arc
   const invertLabelByKey: Record<string, boolean> = {
     'The organisation': false,
     'Care and services': false,
@@ -51,15 +52,23 @@ const topPadFixDeg = 2;   // extra deg of padding at both ends on the top half
     'Food and nutrition': false,
     'Residential community': true
   };
-const extraLabelInsetByKey: Record<string, number> = {
-  'Residential community': 6,
-  'The organisation': 6,
-  'Care and services': 6
-};
+
+  // Extra radial inset for specific labels (moves text away from rim)
+  const extraLabelInsetByKey: Record<string, number> = {
+    'Residential community': 6,
+    'The organisation': 6,
+    'Care and services': 6
+  };
+
   // --- defs ---------------------------------------------------------------
   const defs = svg.appendChild(el('defs'));
 
-  const drop = el('filter', { id: 'softDrop' });
+  // Safe filter region (prevents clipping of slices)
+  const drop = el('filter', {
+    id: 'softDrop',
+    filterUnits: 'userSpaceOnUse',
+    x: '0', y: '0', width: '320', height: '320'
+  });
   drop.innerHTML = `<feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="rgba(0,0,0,.25)" />`;
   defs.appendChild(drop);
 
@@ -79,7 +88,7 @@ const extraLabelInsetByKey: Record<string, number> = {
   const polar = (r: number, aDeg: number) =>
     ({ x: cx + r * Math.cos(toRad(aDeg)), y: cy + r * Math.sin(toRad(aDeg)) });
 
-  // arc following direction (short/long & sweep computed from angles)
+  // arc following direction
   const arcPath = (r: number, a0: number, a1: number) => {
     const p0 = polar(r, a0), p1 = polar(r, a1);
     let da = a1 - a0;
@@ -123,11 +132,11 @@ const extraLabelInsetByKey: Record<string, number> = {
     textEl.setAttribute('textLength', Math.max(0, pathLen).toFixed(0));
   }
 
-  // --- root group & layers (controls stacking order) ---------------------
+  // --- root group & layers -----------------------------------------------
   const g = svg.appendChild(el('g', { filter: 'url(#softDrop)' }));
   const gSlices = g.appendChild(el('g')); // wedges + inner ring
   const gSeps   = g.appendChild(el('g')); // white separators
-  const gLabels = g.appendChild(el('g')); // labels + triangles + numbers (topmost)
+  const gLabels = g.appendChild(el('g')); // labels + triangles + numbers
 
   // Inner white ring between slices and centre
   const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: String(rInner - 1) });
@@ -167,56 +176,58 @@ const extraLabelInsetByKey: Record<string, number> = {
     slice.addEventListener('keypress', (evt: any) => { if (evt.key === 'Enter' || evt.key === ' ') onSelect(seg.key, evt); });
     gSlices.appendChild(slice);
 
-// Curved label path — hugs outer rim, extra pad on triangle side (auto-fit)
-const labelR = rOuter - labelInset;
-const topHalf = !(mid > 90 && mid < 270);
+    // --- Curved label path ------------------------------------------------
+    const topHalf = !(mid > 90 && mid < 270); // compute before use
 
-// extra pad so label avoids the triangle corner (smaller than before)
-const EXTRA = 4; // was 8
-let padStart = side === 'start' ? labelPadDeg + EXTRA : labelPadDeg;
-let padEnd   = side === 'end'   ? labelPadDeg + EXTRA : labelPadDeg;
+    // radial position of label baseline
+    const extraInset = extraLabelInsetByKey[seg.key] || 0;
+    const labelR = rOuter - (labelInset + extraInset + (topHalf ? topRadialFix : 0));
 
-// Default: keep text upright (top half forward, bottom half reversed)
-let forward = topHalf;
-// Flip only selected segments
-if (invertLabelByKey[seg.key]) forward = !forward;
+    // extra pad so label avoids the triangle corner
+    const EXTRA = 4;
+    let padStart = side === 'start' ? labelPadDeg + EXTRA : labelPadDeg;
+    let padEnd   = side === 'end'   ? labelPadDeg + EXTRA : labelPadDeg;
+    if (topHalf) { padStart += topPadFixDeg; padEnd += topPadFixDeg; }
 
-// Build the arc in the chosen direction
-let L0 = forward ? (a0 + padStart) : (a1 - padEnd);
-let L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+    // direction to keep text upright
+    let forward = topHalf;
+    if (invertLabelByKey[seg.key]) forward = !forward;
 
-const pathId = `labelPath${idx}`;
-let labelPath = el('path', {
-  id: pathId,
-  d: arcPath(labelR, L0, L1),
-  fill: 'none',
-  stroke: 'none'
-}) as SVGPathElement;
-defs.appendChild(labelPath);
+    // build the arc in the chosen direction
+    let L0 = forward ? (a0 + padStart) : (a1 - padEnd);
+    let L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
 
-const t  = el('text', { class: 'arc-label', 'text-anchor': 'middle' }) as SVGTextElement;
+    const pathId = `labelPath${idx}`;
+    const labelPath = el('path', {
+      id: pathId,
+      d: arcPath(labelR, L0, L1),
+      fill: 'none',
+      stroke: 'none'
+    }) as SVGPathElement;
+    defs.appendChild(labelPath);
 
-const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
-(tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
-tp.setAttribute('href', `#${pathId}`);
-tp.textContent = seg.key;
-t.appendChild(tp);
-(t.style as any).pointerEvents = 'none';
-gLabels.appendChild(t);
+    const t  = el('text', { class: 'arc-label', 'text-anchor': 'middle' }) as SVGTextElement;
+    const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
+    (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
+    tp.setAttribute('href', `#${pathId}`);
+    tp.textContent = seg.key;
+    t.appendChild(tp);
+    (t.style as any).pointerEvents = 'none';
+    gLabels.appendChild(t);
 
-// First pass fit (down to 7px)
-fitTextToPath(t, labelPath, 10, 7);
+    // auto-fit
+    fitTextToPath(t, labelPath, 10, 7);
 
-// If it still doesn’t fit, shave some pad and re-fit down to 6px
-const pathLen = labelPath.getTotalLength() - 6;
-if (t.getComputedTextLength() > pathLen) {
-  padStart = Math.max(2, padStart - 3);
-  padEnd   = Math.max(2, padEnd   - 3);
-  L0 = forward ? (a0 + padStart) : (a1 - padEnd);
-  L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
-  labelPath.setAttribute('d', arcPath(labelR, L0, L1));
-  fitTextToPath(t, labelPath, 9, 6);
-}
+    // If still tight, shave some pad and re-fit down to 6px
+    const pathLen = labelPath.getTotalLength() - 6;
+    if (t.getComputedTextLength() > pathLen) {
+      padStart = Math.max(2, padStart - 3);
+      padEnd   = Math.max(2, padEnd   - 3);
+      L0 = forward ? (a0 + padStart) : (a1 - padEnd);
+      L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+      labelPath.setAttribute('d', arcPath(labelR, L0, L1));
+      fitTextToPath(t, labelPath, 9, 6);
+    }
 
     // --- Corner triangle with number --------------------------------------
     const cornerAngle   = side === 'start' ? a0 : a1;
