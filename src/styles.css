@@ -133,3 +133,12 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helve
 
 /* White radial separators */
 #policy-wheel .separator { stroke:#fff; stroke-width:6; stroke-linecap:round; }
+
+#policy-wheel .corner-tri { stroke-width: 1; }
+
+#policy-wheel .badge-text {
+  font: 700 8.5px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
