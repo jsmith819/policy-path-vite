@@ -44,7 +44,7 @@ export function drawWheel(
   const invertLabelByKey: Record<string, boolean> = {
     'The organisation': false,
     'Care and services': false,
-    'The environment': false,
+    'The environment': true,
     'Clinical care': true,
     'Food and nutrition': false,
     'Residential community': true
