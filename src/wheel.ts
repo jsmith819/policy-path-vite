@@ -51,11 +51,11 @@ const topPadFixDeg = 2;   // extra deg of padding at both ends on the top half
     'Food and nutrition': false,
     'Residential community': true
   };
-  const extraLabelInsetByKey: Record<string, number> = {
-    'Residential community': 6,
-    'The organisation': 6,
-    'Care and services': 6
-  };
+const extraLabelInsetByKey: Record<string, number> = {
+  'Residential community': 6,
+  'The organisation': 6,
+  'Care and services': 6
+};
   // --- defs ---------------------------------------------------------------
   const defs = svg.appendChild(el('defs'));
 
@@ -168,11 +168,8 @@ const topPadFixDeg = 2;   // extra deg of padding at both ends on the top half
     gSlices.appendChild(slice);
 
 // Curved label path — hugs outer rim, extra pad on triangle side (auto-fit)
-// OLD:
-// const labelR = rOuter - labelInset;
-// NEW:
-const extraInset = extraLabelInsetByKey[seg.key] || 0;
-const labelR = rOuter - (labelInset + extraInset + (topHalf ? topRadialFix : 0));
+const labelR = rOuter - labelInset;
+const topHalf = !(mid > 90 && mid < 270);
 
 // extra pad so label avoids the triangle corner (smaller than before)
 const EXTRA = 4; // was 8
