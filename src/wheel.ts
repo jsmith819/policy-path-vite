@@ -42,7 +42,7 @@ export function drawWheel(
 // Labels you want inverted (rendered the opposite way along the arc)
 const invertLabelByKey: Record<string, boolean> = {
   'The organisation': false,
-  'Care and services': true,
+  'Care and services': false,
   'The environment': false,
   'Clinical care': true,
   'Food and nutrition': false,
