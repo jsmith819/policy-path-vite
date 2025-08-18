@@ -39,6 +39,15 @@ export function drawWheel(
     { key: 'Residential community', color: '#faa916' }
   ];
   const center = { key: '1. The Individual', color: '#e94e77' };
+// Labels you want inverted (rendered the opposite way along the arc)
+const invertLabelByKey: Record<string, boolean> = {
+  'The organisation': false,
+  'Care and services': true,
+  'The environment': false,
+  'Clinical care': true,
+  'Food and nutrition': false,
+  'Residential community': true
+};
 
   // --- defs ---------------------------------------------------------------
   const defs = svg.appendChild(el('defs'));
@@ -149,28 +158,41 @@ export function drawWheel(
     g.appendChild(slice);
 
     // Curved label path — always left→right; extra pad on triangle side; hugs outer rim
-    const labelR = rOuter - labelInset;
-    const topHalf = !(mid > 90 && mid < 270);
-    const extraPadAtTriangle = 8;
-    const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
-    const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
-    const L0 = topHalf ? (a0 + padStart) : (a1 - padEnd);
-    const L1 = topHalf ? (a1 - padEnd)   : (a0 + padStart);
+// Curved label path — hugs outer rim, extra pad on triangle side
+const labelR = rOuter - labelInset;
+const topHalf = !(mid > 90 && mid < 270);
 
-    const pathId = `labelPath${idx}`;
-    const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
-    defs.appendChild(labelPath);
+// extra pad so label avoids the triangle corner
+const side = cornerSide[idx];                 // 'start' | 'end'
+const extraPadAtTriangle = 8;
+const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
+const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
 
-    const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
-    const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
-    (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
-    tp.setAttribute('href', `#${pathId}`);
-    tp.textContent = seg.key;
-    t.appendChild(tp);
-    (t.style as any).pointerEvents = 'none';
-    g.appendChild(t);
+// Default: keep text upright (top half forward, bottom half reversed)
+let forward = topHalf;
+// Flip only selected segments
+if (invertLabelByKey[seg.key]) forward = !forward;
 
-    fitTextToPath(t, labelPath, 10, 8);
+// Build the arc in the chosen direction
+const L0 = forward ? (a0 + padStart) : (a1 - padEnd);
+const L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+
+const pathId = `labelPath${idx}`;
+const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
+defs.appendChild(labelPath);
+
+const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
+const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
+(tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
+tp.setAttribute('href', `#${pathId}`);
+tp.textContent = seg.key;
+t.appendChild(tp);
+(t.style as any).pointerEvents = 'none';
+g.appendChild(t);
+
+// Fit to arc
+fitTextToPath(t, labelPath, 10, 8);
+
 
     // --- Corner triangle with number --------------------------------------
     const cornerAngle   = side === 'start' ? a0 : a1;
