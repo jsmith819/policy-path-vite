@@ -182,7 +182,8 @@ export function drawWheel(
     const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
     defs.appendChild(labelPath);
 
-    const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
+    const t  = el('text', { class: 'arc-label', 'text-anchor': 'middle' }) as SVGTextElement;
+
     const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
     (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
     tp.setAttribute('href', `#${pathId}`);
