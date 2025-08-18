@@ -23,7 +23,7 @@ export function drawWheel(
 
   // Put label path very close to the rim so it "hugs" the outer curve
   const labelInset  = 6;    // (was 12)
-  const labelPadDeg = 8;
+  const labelPadDeg = 4;
 
   // Corner triangle sizing
   const triRadialDepth = 14;
@@ -161,39 +161,55 @@ export function drawWheel(
     slice.addEventListener('keypress', (evt: any) => { if (evt.key === 'Enter' || evt.key === ' ') onSelect(seg.key, evt); });
     gSlices.appendChild(slice);
 
-    // Curved label path — hugs outer rim, extra pad on triangle side
-    const labelR = rOuter - labelInset;
-    const topHalf = !(mid > 90 && mid < 270);
+// Curved label path — hugs outer rim, extra pad on triangle side (auto-fit)
+const labelR = rOuter - labelInset;
+const topHalf = !(mid > 90 && mid < 270);
 
-    // extra pad so label avoids the triangle corner
-    const extraPadAtTriangle = 8;
-    const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
-    const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
+// extra pad so label avoids the triangle corner (smaller than before)
+const EXTRA = 4; // was 8
+let padStart = side === 'start' ? labelPadDeg + EXTRA : labelPadDeg;
+let padEnd   = side === 'end'   ? labelPadDeg + EXTRA : labelPadDeg;
 
-    // Default: keep text upright (top half forward, bottom half reversed)
-    let forward = topHalf;
-    if (invertLabelByKey[seg.key]) forward = !forward;
+// Default: keep text upright (top half forward, bottom half reversed)
+let forward = topHalf;
+// Flip only selected segments
+if (invertLabelByKey[seg.key]) forward = !forward;
 
-    // Build the arc in the chosen direction
-    const L0 = forward ? (a0 + padStart) : (a1 - padEnd);
-    const L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+// Build the arc in the chosen direction
+let L0 = forward ? (a0 + padStart) : (a1 - padEnd);
+let L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
 
-    const pathId = `labelPath${idx}`;
-    const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
-    defs.appendChild(labelPath);
+const pathId = `labelPath${idx}`;
+let labelPath = el('path', {
+  id: pathId,
+  d: arcPath(labelR, L0, L1),
+  fill: 'none',
+  stroke: 'none'
+}) as SVGPathElement;
+defs.appendChild(labelPath);
 
-    const t  = el('text', { class: 'arc-label', 'text-anchor': 'middle' }) as SVGTextElement;
+const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
+const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
+(tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
+tp.setAttribute('href', `#${pathId}`);
+tp.textContent = seg.key;
+t.appendChild(tp);
+(t.style as any).pointerEvents = 'none';
+gLabels.appendChild(t);
 
-    const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
-    (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
-    tp.setAttribute('href', `#${pathId}`);
-    tp.textContent = seg.key;
-    t.appendChild(tp);
-    (t.style as any).pointerEvents = 'none';
-    gLabels.appendChild(t);
+// First pass fit (down to 7px)
+fitTextToPath(t, labelPath, 10, 7);
 
-    // Fit to arc
-    fitTextToPath(t, labelPath, 10, 8);
+// If it still doesn’t fit, shave some pad and re-fit down to 6px
+const pathLen = labelPath.getTotalLength() - 6;
+if (t.getComputedTextLength() > pathLen) {
+  padStart = Math.max(2, padStart - 3);
+  padEnd   = Math.max(2, padEnd   - 3);
+  L0 = forward ? (a0 + padStart) : (a1 - padEnd);
+  L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+  labelPath.setAttribute('d', arcPath(labelR, L0, L1));
+  fitTextToPath(t, labelPath, 9, 6);
+}
 
     // --- Corner triangle with number --------------------------------------
     const cornerAngle   = side === 'start' ? a0 : a1;
