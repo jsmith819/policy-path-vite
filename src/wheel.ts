@@ -21,9 +21,11 @@ export function drawWheel(
   const rInner  = 82;  // donut inner radius
   const rCenter = 58;  // centre circle radius
 
-  // Put label path very close to the rim so it "hugs" the outer curve
-  const labelInset  = 6;    // (was 12)
-  const labelPadDeg = 4;
+  // Label path should hug the rim, but we’ll give top-half labels a tiny inward nudge
+  const labelInset   = 6;   // base inset from rim
+  const labelPadDeg  = 6;   // base end padding (deg)
+  const topRadialFix = 3;   // px inward for top-half labels
+  const topPadFixDeg = 2;   // extra pad on both ends for top-half labels
 
   // Corner triangle sizing
   const triRadialDepth = 14;
@@ -40,12 +42,12 @@ export function drawWheel(
   ];
   const center = { key: '1. The Individual', color: '#e94e77' };
 
-  // Labels you want inverted (rendered the opposite way along the arc)
+  // Labels you want flipped along the arc (so you can fine‑tune orientation)
   const invertLabelByKey: Record<string, boolean> = {
     'The organisation': false,
     'Care and services': false,
-    'The environment': true,
-    'Clinical care': true,
+    'The environment':  true,
+    'Clinical care':     true,
     'Food and nutrition': false,
     'Residential community': true
   };
@@ -58,24 +60,22 @@ export function drawWheel(
   defs.appendChild(drop);
 
   const mkGrad = (id: string, base: string) => {
-    const g = el('linearGradient', { id, x1: '0%', y1: '0%', x2: '100%', y2: '100%' });
-    const stop = (o: number, c: string) =>
-      g.appendChild(el('stop', { offset: `${o * 100}%`, 'stop-color': c }));
+    const g = el('linearGradient', { id, x1:'0%', y1:'0%', x2:'100%', y2:'100%' });
+    const stop = (o:number,c:string) => g.appendChild(el('stop',{ offset:`${o*100}%`, 'stop-color':c }));
     stop(0, shade(base, 0.12));
-    stop(1, shade(base, -0.08));
+    stop(1, shade(base,-0.08));
     defs.appendChild(g);
   };
-  segments.forEach((s, i) => mkGrad(`segGrad${i}`, s.color));
+  segments.forEach((s,i)=>mkGrad(`segGrad${i}`, s.color));
   mkGrad('centerGrad', center.color);
 
   // --- helpers ------------------------------------------------------------
-  const toRad = (d: number) => (Math.PI / 180) * d;
-  const polar = (r: number, aDeg: number) =>
-    ({ x: cx + r * Math.cos(toRad(aDeg)), y: cy + r * Math.sin(toRad(aDeg)) });
+  const toRad = (d:number)=> (Math.PI/180)*d;
+  const polar = (r:number, aDeg:number)=> ({ x: cx + r*Math.cos(toRad(aDeg)), y: cy + r*Math.sin(toRad(aDeg)) });
 
   // arc following direction (short/long & sweep computed from angles)
-  const arcPath = (r: number, a0: number, a1: number) => {
-    const p0 = polar(r, a0), p1 = polar(r, a1);
+  const arcPath = (r:number, a0:number, a1:number) => {
+    const p0 = polar(r,a0), p1 = polar(r,a1);
     let da = a1 - a0;
     if (da > 360) da -= 360; else if (da < -360) da += 360;
     const large = Math.abs(da) > 180 ? 1 : 0;
@@ -83,10 +83,10 @@ export function drawWheel(
     return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} ${sweep} ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
   };
 
-  const donutPath = (a0: number, a1: number) => {
-    const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
-    const po0 = polar(rOuter, a0), po1 = polar(rOuter, a1);
-    const pi0 = polar(rInner, a1), pi1 = polar(rInner, a0);
+  const donutPath = (a0:number, a1:number) => {
+    const large = Math.abs(a1-a0) > 180 ? 1 : 0;
+    const po0 = polar(rOuter,a0), po1 = polar(rOuter,a1);
+    const pi0 = polar(rInner,a1), pi1 = polar(rInner,a0);
     return [
       `M ${po0.x.toFixed(2)} ${po0.y.toFixed(2)}`,
       `A ${rOuter} ${rOuter} 0 ${large} 1 ${po1.x.toFixed(2)} ${po1.y.toFixed(2)}`,
@@ -96,121 +96,118 @@ export function drawWheel(
     ].join(' ');
   };
 
-  function fitTextToPath(textEl: SVGTextElement, pathEl: SVGPathElement, maxPx = 10, minPx = 8) {
+  function fitTextToPath(textEl: SVGTextElement, pathEl: SVGPathElement, maxPx=10, minPx=8) {
     const pathLen = pathEl.getTotalLength() - 6;
     let size = maxPx;
     (textEl.style as any).fontSize = `${size}px`;
     (textEl.style as any).letterSpacing = '0px';
-    for (let i = 0; i < 12; i++) {
+    for (let i=0; i<10; i++) {
       const tLen = textEl.getComputedTextLength();
       if (tLen <= pathLen || size <= minPx) break;
       size -= 0.5;
       (textEl.style as any).fontSize = `${size}px`;
     }
-    for (let s = 0; s < 8; s++) {
+    for (let s=0; s<8; s++) {
       const tLen = textEl.getComputedTextLength();
       if (tLen <= pathLen) return;
       const cur = parseFloat((textEl.style as any).letterSpacing || '0') || 0;
       (textEl.style as any).letterSpacing = `${cur - 0.1}px`;
     }
-    textEl.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+    textEl.setAttribute('lengthAdjust','spacingAndGlyphs');
     textEl.setAttribute('textLength', Math.max(0, pathLen).toFixed(0));
   }
 
   // --- root group & layers (controls stacking order) ---------------------
-  const g = svg.appendChild(el('g', { filter: 'url(#softDrop)' }));
+  const g = svg.appendChild(el('g', { filter:'url(#softDrop)' }));
   const gSlices = g.appendChild(el('g')); // wedges + inner ring
   const gSeps   = g.appendChild(el('g')); // white separators
   const gLabels = g.appendChild(el('g')); // labels + triangles + numbers (topmost)
 
-  // Inner white ring between slices and centre
-  const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: String(rInner - 1) });
-  innerRing.setAttribute('fill', 'none');
-  innerRing.setAttribute('stroke', '#fff');
-  innerRing.setAttribute('stroke-width', '14');
+  // Inner white ring
+  const innerRing = el('circle', { cx:String(cx), cy:String(cy), r:String(rInner-1) });
+  innerRing.setAttribute('fill','none');
+  innerRing.setAttribute('stroke','#fff');
+  innerRing.setAttribute('stroke-width','14');
   innerRing.style.pointerEvents = 'none';
   gSlices.appendChild(innerRing);
 
   // --- wedges -------------------------------------------------------------
   const step  = 360 / segments.length;
-  const start = -90 - step / 2; // green centred at 12 o’clock
+  const start = -90 - step/2; // green centred at 12 o’clock
 
-  // Which corner gets the triangle (start boundary or end boundary)
-  const cornerSide: ('start' | 'end')[] = ['end', 'end', 'end', 'end', 'end', 'end'];
+  const cornerSide: ('start'|'end')[] = ['end','end','end','end','end','end'];
 
   segments.forEach((seg, idx) => {
-    const a0  = start + idx * step;
+    const a0  = start + idx*step;
     const a1  = a0 + step;
     const mid = (a0 + a1) / 2;
     const side = cornerSide[idx];
 
     // Slice body
-    const slice = el('path', {
-      d: donutPath(a0, a1),
+    const slice = el('path',{
+      d: donutPath(a0,a1),
       fill: `url(#segGrad${idx})`,
-      stroke: '#fff',
-      'stroke-width': '1.25',
-      tabindex: '0',
-      role: 'button',
-      'data-name': seg.key,
-      'aria-label': seg.key
+      stroke:'#fff','stroke-width':'1.25',
+      tabindex:'0', role:'button',
+      'data-name': seg.key, 'aria-label': seg.key
     });
     slice.style.cursor = 'pointer';
     slice.classList.add('seg');
-    slice.addEventListener('click', (evt) => onSelect(seg.key, evt));
-    slice.addEventListener('keypress', (evt: any) => { if (evt.key === 'Enter' || evt.key === ' ') onSelect(seg.key, evt); });
+    slice.addEventListener('click', (evt)=>onSelect(seg.key,evt));
+    slice.addEventListener('keypress', (evt:any)=>{ if (evt.key==='Enter'||evt.key===' ') onSelect(seg.key,evt); });
     gSlices.appendChild(slice);
 
-// Curved label path — hugs outer rim, extra pad on triangle side (auto-fit)
-const labelR = rOuter - labelInset;
-const topHalf = !(mid > 90 && mid < 270);
+    // ---- Curved label path (hugs rim, avoids separators, centred) ----
+    const isTop = !(mid > 90 && mid < 270);
 
-// extra pad so label avoids the triangle corner (smaller than before)
-const EXTRA = 4; // was 8
-let padStart = side === 'start' ? labelPadDeg + EXTRA : labelPadDeg;
-let padEnd   = side === 'end'   ? labelPadDeg + EXTRA : labelPadDeg;
+    const baseLabelR = rOuter - labelInset;
+    const labelR = baseLabelR - (isTop ? topRadialFix : 0);
 
-// Default: keep text upright (top half forward, bottom half reversed)
-let forward = topHalf;
-// Flip only selected segments
-if (invertLabelByKey[seg.key]) forward = !forward;
+    const extraPadAtTriangle = 8;
+    const padStartBase = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
+    const padEndBase   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
 
-// Build the arc in the chosen direction
-let L0 = forward ? (a0 + padStart) : (a1 - padEnd);
-let L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+    // final pads for this segment
+    const padStart0 = padStartBase + (isTop ? topPadFixDeg : 0);
+    const padEnd0   = padEndBase   + (isTop ? topPadFixDeg : 0);
 
-const pathId = `labelPath${idx}`;
-let labelPath = el('path', {
-  id: pathId,
-  d: arcPath(labelR, L0, L1),
-  fill: 'none',
-  stroke: 'none'
-}) as SVGPathElement;
-defs.appendChild(labelPath);
+    let forward = isTop;
+    if (invertLabelByKey[seg.key]) forward = !forward;
 
-const t  = el('text', { class: 'arc-label', 'text-anchor': 'middle' }) as SVGTextElement;
+    let L0 = forward ? (a0 + padStart0) : (a1 - padEnd0);
+    let L1 = forward ? (a1 - padEnd0)   : (a0 + padStart0);
 
-const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
-(tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
-tp.setAttribute('href', `#${pathId}`);
-tp.textContent = seg.key;
-t.appendChild(tp);
-(t.style as any).pointerEvents = 'none';
-gLabels.appendChild(t);
+    const pathId = `labelPath${idx}`;
+    const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill:'none', stroke:'none' }) as SVGPathElement;
+    defs.appendChild(labelPath);
 
-// First pass fit (down to 7px)
-fitTextToPath(t, labelPath, 10, 7);
+    const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
+    const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
+    (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
+    tp.setAttribute('href', `#${pathId}`);
+    tp.textContent = seg.key;
+    t.appendChild(tp);
+    (t.style as any).pointerEvents = 'none';
+    gLabels.appendChild(t);
 
-// If it still doesn’t fit, shave some pad and re-fit down to 6px
-const pathLen = labelPath.getTotalLength() - 6;
-if (t.getComputedTextLength() > pathLen) {
-  padStart = Math.max(2, padStart - 3);
-  padEnd   = Math.max(2, padEnd   - 3);
-  L0 = forward ? (a0 + padStart) : (a1 - padEnd);
-  L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
-  labelPath.setAttribute('d', arcPath(labelR, L0, L1));
-  fitTextToPath(t, labelPath, 9, 6);
-}
+    // Fit to arc first
+    fitTextToPath(t, labelPath, 10, 8);
+
+    // If still too long, shave padding then re-fit (down to 6px font)
+    const targetLen = labelPath.getTotalLength() - 6;
+    if (t.getComputedTextLength() > targetLen) {
+      let padStart = padStart0;
+      let padEnd   = padEnd0;
+      for (let k = 0; k < 3; k++) { // up to 3 rounds
+        if (t.getComputedTextLength() <= targetLen) break;
+        padStart = Math.max(2, padStart - 2);
+        padEnd   = Math.max(2, padEnd   - 2);
+        L0 = forward ? (a0 + padStart) : (a1 - padEnd);
+        L1 = forward ? (a1 - padEnd)   : (a0 + padStart);
+        labelPath.setAttribute('d', arcPath(labelR, L0, L1));
+        fitTextToPath(t, labelPath, 9, 6);
+      }
+    }
 
     // --- Corner triangle with number --------------------------------------
     const cornerAngle   = side === 'start' ? a0 : a1;
@@ -247,13 +244,13 @@ if (t.getComputedTextLength() > pathLen) {
 
   // White separators (drawn above slices, below labels)
   for (let i = 0; i < segments.length; i++) {
-    const a  = start + i * step;
+    const a  = start + i*step;
     const p0 = polar(rInner + 2, a);
     const p1 = polar(rOuter - 2, a);
     const sep = el('line', {
-      x1: p0.x.toFixed(2), y1: p0.y.toFixed(2),
-      x2: p1.x.toFixed(2), y2: p1.y.toFixed(2),
-      class: 'separator'
+      x1:p0.x.toFixed(2), y1:p0.y.toFixed(2),
+      x2:p1.x.toFixed(2), y2:p1.y.toFixed(2),
+      class:'separator'
     });
     sep.style.pointerEvents = 'none';
     gSeps.appendChild(sep);
@@ -261,21 +258,21 @@ if (t.getComputedTextLength() > pathLen) {
 
   // Centre circle + label
   const centerCircle = el('circle', {
-    cx: String(cx), cy: String(cy), r: String(rCenter),
-    fill: 'url(#centerGrad)', stroke: '#fff', 'stroke-width': '1.25'
+    cx:String(cx), cy:String(cy), r:String(rCenter),
+    fill:'url(#centerGrad)', stroke:'#fff', 'stroke-width':'1.25'
   });
   centerCircle.style.cursor = 'pointer';
-  centerCircle.addEventListener('click', (evt) => onSelect(center.key, evt));
+  centerCircle.addEventListener('click', (evt)=>onSelect(center.key,evt));
   gSlices.appendChild(centerCircle);
 
-  const cLabel = el('text', { x: String(cx), y: String(cy), class: 'center-label', 'text-anchor': 'middle' });
+  const cLabel = el('text', { x:String(cx), y:String(cy), class:'center-label', 'text-anchor':'middle' });
   cLabel.textContent = 'The Individual';
   (cLabel as any).style.pointerEvents = 'none';
   gLabels.appendChild(cLabel);
 
   // Centre "1" badge (tinted)
   const cPos = polar(rCenter - 12, -90);
-  const cBadge = el('circle', { cx: cPos.x.toFixed(2), cy: cPos.y.toFixed(2), r: '9', class: 'badge' });
+  const cBadge = el('circle', { cx:cPos.x.toFixed(2), cy:cPos.y.toFixed(2), r:'9', class:'badge' });
   const cBadgeFill   = shade(center.color, 0.20);
   const cBadgeStroke = shade(center.color, -0.10);
   (cBadge.style as any).fill   = cBadgeFill;
@@ -283,26 +280,26 @@ if (t.getComputedTextLength() > pathLen) {
   (cBadge as any).style.pointerEvents = 'none';
   gLabels.appendChild(cBadge);
 
-  const cNum = el('text', { x: cPos.x.toFixed(2), y: cPos.y.toFixed(2), class: 'badge-text' });
+  const cNum = el('text', { x:cPos.x.toFixed(2), y:cPos.y.toFixed(2), class:'badge-text' });
   cNum.textContent = '1';
   (cNum.style as any).fill = contrastColor(cBadgeFill);
   (cNum as any).style.pointerEvents = 'none';
   gLabels.appendChild(cNum);
 
   // ---- helpers -----------------------------------------------------------
-  function el<K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string> = {}) {
+  function el<K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string,string> = {}) {
     const node = document.createElementNS(NS, name);
-    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    for (const [k,v] of Object.entries(attrs)) node.setAttribute(k, v);
     return node as SVGElementTagNameMap[K];
   }
 
-  function shade(hex: string, amt: number) {
-    const c = hex.replace('#', '');
-    const n = parseInt(c, 16);
-    const r = Math.min(255, Math.max(0, ((n >> 16) & 0xff) + Math.round(255 * amt)));
-    const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + Math.round(255 * amt)));
-    const b = Math.min(255, Math.max(0, (n & 0xff) + Math.round(255 * amt)));
-    return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
+  function shade(hex:string, amt:number) {
+    const c = hex.replace('#','');
+    const n = parseInt(c,16);
+    const r = Math.min(255, Math.max(0, ((n>>16)&0xff) + Math.round(255*amt)));
+    const g = Math.min(255, Math.max(0, ((n>>8 )&0xff) + Math.round(255*amt)));
+    const b = Math.min(255, Math.max(0, ( n     &0xff) + Math.round(255*amt)));
+    return `#${(r<<16 | g<<8 | b).toString(16).padStart(6,'0')}`;
   }
 
   function contrastColor(hex: string) {
