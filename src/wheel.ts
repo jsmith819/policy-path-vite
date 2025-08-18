@@ -112,7 +112,7 @@ export function drawWheel(
 
   // Which corner of each wedge gets the triangle (start boundary or end boundary)
   // Order: green, purple, navy, teal, orange, yellow.
-  const cornerSide: ('start' | 'end')[] = ['start', 'end', 'end', 'end', 'start', 'end'];
+  const cornerSide: ('start' | 'end')[] = ['end', 'end', 'end', 'end', 'end', 'end'];
 
   segments.forEach((seg, idx) => {
     const a0  = start + idx * step;
