@@ -188,9 +188,6 @@ let labelPath = el('path', {
 }) as SVGPathElement;
 defs.appendChild(labelPath);
 
-const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
-
-// after  ✅ center the text around startOffset="50%"
 const t  = el('text', { class: 'arc-label', 'text-anchor': 'middle' }) as SVGTextElement;
 
 const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
