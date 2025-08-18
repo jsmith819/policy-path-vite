@@ -21,13 +21,13 @@ export function drawWheel(
   const rInner  = 82;  // donut inner radius
   const rCenter = 58;  // centre circle radius
 
-  // Label path sits slightly inboard of the outer rim
-  const labelInset  = 12;
-  const labelPadDeg = 8; // trim near slice corners so text doesn't collide
+  // Put label path very close to the rim so it "hugs" the outer curve
+  const labelInset  = 6;  // << was 12
+  const labelPadDeg = 8;
 
   // Corner triangle sizing
-  const triRadialDepth = 14; // inward from rim
-  const triSweepDeg    = 10; // degrees along arc for triangle base
+  const triRadialDepth = 14;
+  const triSweepDeg    = 10;
 
   // Segments (keys must match main.ts)
   const segments: { key: string; color: string }[] = [
@@ -63,10 +63,15 @@ export function drawWheel(
   const polar = (r: number, aDeg: number) =>
     ({ x: cx + r * Math.cos(toRad(aDeg)), y: cy + r * Math.sin(toRad(aDeg)) });
 
+  // FIXED: compute sweep/large flags from angle direction so we always use the short arc
   const arcPath = (r: number, a0: number, a1: number) => {
-    const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
     const p0 = polar(r, a0), p1 = polar(r, a1);
-    return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
+    let da = a1 - a0;
+    // normalize to [-360, 360] in case of wrap
+    if (da > 360) da -= 360; else if (da < -360) da += 360;
+    const large = Math.abs(da) > 180 ? 1 : 0;
+    const sweep = da >= 0 ? 1 : 0; // positive delta -> sweep=1, negative -> sweep=0
+    return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${large} ${sweep} ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
   };
 
   const donutPath = (a0: number, a1: number) => {
@@ -83,26 +88,22 @@ export function drawWheel(
   };
 
   function fitTextToPath(textEl: SVGTextElement, pathEl: SVGPathElement, maxPx = 10, minPx = 8) {
-    const pathLen = pathEl.getTotalLength() - 6; // small margin
+    const pathLen = pathEl.getTotalLength() - 6;
     let size = maxPx;
     (textEl.style as any).fontSize = `${size}px`;
     (textEl.style as any).letterSpacing = '0px';
-
-    // 1) shrink font
     for (let i = 0; i < 12; i++) {
       const tLen = textEl.getComputedTextLength();
       if (tLen <= pathLen || size <= minPx) break;
       size -= 0.5;
       (textEl.style as any).fontSize = `${size}px`;
     }
-    // 2) tighten spacing
     for (let s = 0; s < 8; s++) {
       const tLen = textEl.getComputedTextLength();
       if (tLen <= pathLen) return;
       const cur = parseFloat((textEl.style as any).letterSpacing || '0') || 0;
       (textEl.style as any).letterSpacing = `${cur - 0.1}px`;
     }
-    // 3) final clamp: force-fit
     textEl.setAttribute('lengthAdjust', 'spacingAndGlyphs');
     textEl.setAttribute('textLength', Math.max(0, pathLen).toFixed(0));
   }
@@ -118,12 +119,10 @@ export function drawWheel(
   g.appendChild(innerRing);
 
   // --- wedges -------------------------------------------------------------
-  // Rotate so green segment is centred at 12 o’clock
   const step  = 360 / segments.length;
-  const start = -90 - step / 2;
+  const start = -90 - step / 2; // green centred at 12 o’clock
 
   // Which corner gets the triangle (start boundary or end boundary)
-  // Order: green, purple, navy, teal, orange, yellow.
   const cornerSide: ('start' | 'end')[] = ['end', 'end', 'end', 'end', 'end', 'end'];
 
   segments.forEach((seg, idx) => {
@@ -146,20 +145,15 @@ export function drawWheel(
     slice.style.cursor = 'pointer';
     slice.classList.add('seg');
     slice.addEventListener('click', (evt) => onSelect(seg.key, evt));
-    slice.addEventListener('keypress', (evt: any) => {
-      if (evt.key === 'Enter' || evt.key === ' ') onSelect(seg.key, evt);
-    });
+    slice.addEventListener('keypress', (evt: any) => { if (evt.key === 'Enter' || evt.key === ' ') onSelect(seg.key, evt); });
     g.appendChild(slice);
 
-    // Curved label path — always left→right; add extra pad on triangle side
+    // Curved label path — always left→right; extra pad on triangle side; hugs outer rim
     const labelR = rOuter - labelInset;
     const topHalf = !(mid > 90 && mid < 270);
-
     const extraPadAtTriangle = 8;
     const padStart = side === 'start' ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
     const padEnd   = side === 'end'   ? labelPadDeg + extraPadAtTriangle : labelPadDeg;
-
-    // reverse direction on bottom half
     const L0 = topHalf ? (a0 + padStart) : (a1 - padEnd);
     const L1 = topHalf ? (a1 - padEnd)   : (a0 + padStart);
 
@@ -167,7 +161,7 @@ export function drawWheel(
     const labelPath = el('path', { id: pathId, d: arcPath(labelR, L0, L1), fill: 'none', stroke: 'none' });
     defs.appendChild(labelPath);
 
-    const t = el('text', { class: 'arc-label' }) as SVGTextElement;
+    const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
     const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
     (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
     tp.setAttribute('href', `#${pathId}`);
@@ -178,17 +172,16 @@ export function drawWheel(
 
     fitTextToPath(t, labelPath, 10, 8);
 
-    // --- Corner triangle with number (inside the slice) -------------------
+    // --- Corner triangle with number --------------------------------------
     const cornerAngle   = side === 'start' ? a0 : a1;
     const intoWedgeSign = side === 'start' ? +1 : -1;
 
-    const rimR   = rOuter - 1;              // just inside rim
-    const innerR = rOuter - triRadialDepth; // radial depth of triangle
+    const rimR   = rOuter - 1;
+    const innerR = rOuter - triRadialDepth;
 
-    // Triangle points:
-    const P0 = polar(rimR,   cornerAngle);                            // on rim at boundary
-    const P1 = polar(innerR, cornerAngle);                            // inward on boundary
-    const P2 = polar(rimR,   cornerAngle + intoWedgeSign * triSweepDeg); // into wedge
+    const P0 = polar(rimR,   cornerAngle);
+    const P1 = polar(innerR, cornerAngle);
+    const P2 = polar(rimR,   cornerAngle + intoWedgeSign * triSweepDeg);
 
     const tri = document.createElementNS(NS, 'polygon');
     tri.setAttribute('points', `${P0.x.toFixed(2)},${P0.y.toFixed(2)} ${P1.x.toFixed(2)},${P1.y.toFixed(2)} ${P2.x.toFixed(2)},${P2.y.toFixed(2)}`);
@@ -200,20 +193,19 @@ export function drawWheel(
     (tri as any).style.pointerEvents = 'none';
     g.appendChild(tri);
 
-    // Number inside the triangle (centroid)
     const tx = (P0.x + P1.x + P2.x) / 3;
     const ty = (P0.y + P1.y + P2.y) / 3;
     const num = document.createElementNS(NS, 'text');
     num.setAttribute('class', 'badge-text');
     num.setAttribute('x', tx.toFixed(2));
     num.setAttribute('y', ty.toFixed(2));
-    num.textContent = String(idx + 2); // 2..7
+    num.textContent = String(idx + 2);
     (num.style as any).fill = contrastColor(triFill);
     (num as any).style.pointerEvents = 'none';
     g.appendChild(num);
   });
 
-  // White separators between slices (rounded)
+  // White separators
   for (let i = 0; i < segments.length; i++) {
     const a  = start + i * step;
     const p0 = polar(rInner + 2, a);
@@ -237,7 +229,7 @@ export function drawWheel(
   (cLabel as any).style.pointerEvents = 'none';
   g.appendChild(cLabel);
 
-  // Centre "1" badge (tinted) at 12 o'clock inside the centre
+  // Centre "1" badge (tinted)
   const cPos = polar(rCenter - 12, -90);
   const cBadge = el('circle', { cx: cPos.x.toFixed(2), cy: cPos.y.toFixed(2), r: '9', class: 'badge' });
   const cBadgeFill   = shade(center.color, 0.20);
@@ -253,7 +245,7 @@ export function drawWheel(
   (cNum as any).style.pointerEvents = 'none';
   g.appendChild(cNum);
 
-  // ---- tiny DOM helpers ---------------------------------------------------
+  // ---- helpers -----------------------------------------------------------
   function el<K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string> = {}) {
     const node = document.createElementNS(NS, name);
     for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
@@ -270,7 +262,6 @@ export function drawWheel(
   }
 
   function contrastColor(hex: string) {
-    // '#333' for light fills; '#fff' for dark fills (sRGB-relative luminance)
     const to = (s: string) => parseInt(s, 16) / 255;
     const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
     const r = lin(to(hex.slice(1, 3)));
