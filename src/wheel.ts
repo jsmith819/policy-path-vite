@@ -189,6 +189,10 @@ let labelPath = el('path', {
 defs.appendChild(labelPath);
 
 const t  = el('text', { class: 'arc-label' }) as SVGTextElement;
+
+// after  ✅ center the text around startOffset="50%"
+const t  = el('text', { class: 'arc-label', 'text-anchor': 'middle' }) as SVGTextElement;
+
 const tp = el('textPath', { startOffset: '50%' }) as SVGTextPathElement;
 (tp as any).setAttributeNS(XLINK, 'xlink:href', `#${pathId}`);
 tp.setAttribute('href', `#${pathId}`);
