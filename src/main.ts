@@ -226,9 +226,16 @@ function selectSegment(segmentOrKey: string, evt: Event) {
   else (evt.currentTarget as Element)?.classList.add('active');
 
   // Render list
-  const policies = policiesDataLocal[segmentName] || [];
+  const policies = getPolicies(segmentName);
   const color = policyColorsLocal[segmentName] || '#1c2b4a';
 
+  function getPolicies(segmentName: string): string[] {
+    const target = segmentName.toLowerCase();
+    for (const key of Object.keys(policiesData)) {
+      if (key.toLowerCase() === target) return policiesData[key];
+    }
+    return [];
+  }
   renderPolicies(
     segmentName,
     policies,
