@@ -17,9 +17,9 @@ export function drawWheel(
   svg.style.height = '100%';
 
   const cx = 160, cy = 160;
-  const rOuter  = 140; // donut outer radius
-  const rInner  = 82;  // donut inner radius
-  const rCenter = 58;  // centre circle radius
+  const rOuter  = 148; // donut outer radius
+  const rInner  = 90;  // donut inner radius
+  const rCenter = 66;  // centre circle radius
 
   // Label path radius control
   const labelInset  = 6;     // base inset from outer rim
