@@ -34,30 +34,30 @@ export function drawWheel(
 
   // Segments (keys must match main.ts policiesData keys)
   const segments: { key: string; color: string }[] = [
-    { key: 'The organisation',      color: '#6aaf4b' },
-    { key: 'Care and services',     color: '#7e5aa2' },
-    { key: 'The environment',       color: '#29335c' },
-    { key: 'Clinical care',         color: '#29a9c7' },
-    { key: 'Food and nutrition',    color: '#f18f01' },
-    { key: 'Residential community', color: '#faa916' }
+    { key: 'The Organisation',      color: '#6aaf4b' },
+    { key: 'Care and Services',     color: '#7e5aa2' },
+    { key: 'The Environment',       color: '#29335c' },
+    { key: 'Clinical Care',         color: '#29a9c7' },
+    { key: 'Food and Nutrition',    color: '#f18f01' },
+    { key: 'Residential Community', color: '#faa916' }
   ];
   const center = { key: '1. The Individual', color: '#e94e77' };
 
   // Labels to invert along the arc
   const invertLabelByKey: Record<string, boolean> = {
-    'The organisation': false,
-    'Care and services': false,
-    'The environment': true,
-    'Clinical care': true,
-    'Food and nutrition': false,
-    'Residential community': true
+    'The Organisation': false,
+    'Care and Services': false,
+    'The Environment': true,
+    'Clinical Care': true,
+    'Food and Nutrition': false,
+    'Residential Community': true
   };
 
   // Extra radial inset for specific labels (moves text away from rim)
   const extraLabelInsetByKey: Record<string, number> = {
-    'Residential community': 6,
-    'The organisation': 6,
-    'Care and services': 6
+    'Residential Community': 6,
+    'The Organisation': 6,
+    'Care and Services': 6
   };
 
   // --- defs ---------------------------------------------------------------
