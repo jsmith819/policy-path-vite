@@ -139,10 +139,16 @@ export function drawWheel(
   const gLabels = g.appendChild(el('g')); // labels + triangles + numbers
 
   // Inner white ring between slices and centre
-  const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: String(rInner - 1) });
+  const innerBandPx = 4;  // desired visible white band inside the donut (px)
+  const ringStroke  = 10; // actual stroke width (px)
+  
+  // radius so that: visible band = rInner - (ringRadius - ringStroke/2) = innerBandPx
+  const ringRadius = rInner - innerBandPx + ringStroke / 2;
+  
+  const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: ringRadius.toFixed(2) });
   innerRing.setAttribute('fill', 'none');
   innerRing.setAttribute('stroke', '#fff');
-  innerRing.setAttribute('stroke-width', '8');
+  innerRing.setAttribute('stroke-width', String(ringStroke));
   innerRing.style.pointerEvents = 'none';
   gSlices.appendChild(innerRing);
 
