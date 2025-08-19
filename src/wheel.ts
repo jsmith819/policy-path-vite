@@ -142,7 +142,7 @@ export function drawWheel(
   const innerRing = el('circle', { cx: String(cx), cy: String(cy), r: String(rInner - 1) });
   innerRing.setAttribute('fill', 'none');
   innerRing.setAttribute('stroke', '#fff');
-  innerRing.setAttribute('stroke-width', '14');
+  innerRing.setAttribute('stroke-width', '8');
   innerRing.style.pointerEvents = 'none';
   gSlices.appendChild(innerRing);
 
