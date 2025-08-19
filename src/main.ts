@@ -11,13 +11,11 @@ let currentUsername: string | null = null;
 let tokenMap: TokenMap = loadTokenMap();
 let changeLog: ChangeLogEntry[] = loadChangeLog();
 
-// Expose for quick debugging in the browser console
+// Expose for debugging
 (Object.assign(window as any, { tokenMap, changeLog }));
 
 /**
- * UPDATED:
- * - "1. The Individual" keeps full set.
- * - "The organisation" now has 10 placeholder policies (2.1–2.10).
+ * Data
  */
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
@@ -35,6 +33,7 @@ const policiesData: Record<string, string[]> = {
     'All procedures (22)'
   ],
 
+  // 10 placeholders under The organisation (2.1–2.10)
   'The organisation': [
     '2.1 Placeholder',
     '2.2 Placeholder',
@@ -47,6 +46,7 @@ const policiesData: Record<string, string[]> = {
     '2.9 Placeholder',
     '2.10 Placeholder'
   ],
+
   'Care and services': ['3.1 Assessment & planning', '3.2 Delivery of services'],
   'The environment': ['4.1a Services in home', '4.1b Services outside home'],
   'Clinical care': ['5.1 Clinical governance', '5.2 Infection control'],
@@ -170,7 +170,13 @@ saveTokensBtn.addEventListener('click', () => {
   tokenMap.updatedAt = now;
   (['organisation_name','person','service_type'] as const).forEach(field => {
     if ((tokenMap as any)[field] !== (oldMap as any)[field]) {
-      const entry: ChangeLogEntry = { field, oldValue: (oldMap as any)[field], newValue: (tokenMap as any)[field], user: currentUsername || 'unknown', timestamp: now };
+      const entry: ChangeLogEntry = {
+        field,
+        oldValue: (oldMap as any)[field],
+        newValue: (tokenMap as any)[field],
+        user: currentUsername || 'unknown',
+        timestamp: now
+      };
       changeLog.push(entry);
     }
   });
@@ -194,23 +200,28 @@ closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).styl
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
 
+/** Case-insensitive resolver for segment keys */
+function resolveSegmentKey(name: string): string {
+  const norm = (s: string) => s.toLowerCase().trim();
+  const match = Object.keys(policiesDataLocal).find(k => norm(k) === norm(name));
+  return match || name;
+}
+
 /**
- * UPDATED:
- * - Accepts both raw segment ("The organisation") and compound key
- *   ("The organisation::2.3") so wedge badges can open a specific item.
- * - Skips loading docs for Placeholder items.
+ * Accepts raw segment ("The organisation") or compound key ("The organisation::2.3").
+ * Shows list even if display text casing differs. Skips doc fetch for placeholders.
  */
 function selectSegment(segmentOrKey: string, evt: Event) {
-  const [segmentName, policyId] = segmentOrKey.split('::');
+  const [incomingName, policyId] = segmentOrKey.split('::');
+  const segmentName = resolveSegmentKey(incomingName);
 
   // Clear active
   document.querySelectorAll('#policy-wheel path, #policy-wheel circle')
     .forEach(el => el.classList.remove('active'));
 
-  // Highlight the wedge if possible
-  const segEl = document.querySelector(
-    `#policy-wheel .seg[data-name="${segmentName.replace(/"/g, '\\"')}"]`
-  );
+  // Highlight the exact wedge by matching data-name case-insensitively
+  const segEl = Array.from(document.querySelectorAll('#policy-wheel .seg'))
+    .find(el => (el as HTMLElement).getAttribute('data-name')?.toLowerCase() === incomingName.toLowerCase());
   if (segEl) segEl.classList.add('active');
   else (evt.currentTarget as Element)?.classList.add('active');
 
@@ -221,11 +232,19 @@ function selectSegment(segmentOrKey: string, evt: Event) {
   renderPolicies(
     segmentName,
     policies,
-    (policy) => { loadAndRender(segmentName, policy, tokenMap, changeLog); },
+    (policy) => {
+      // Block placeholders
+      if (/^2\.\d+\s+Placeholder$/i.test(policy)) {
+        const docEl = document.getElementById('docContent');
+        if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
+        return;
+      }
+      loadAndRender(segmentName, policy, tokenMap, changeLog);
+    },
     color
   );
 
-  // Choose initial item
+  // Choose initial policy
   let initial = policies[0];
   if (policyId) {
     const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
@@ -233,14 +252,10 @@ function selectSegment(segmentOrKey: string, evt: Event) {
   }
 
   const docEl = document.getElementById('docContent');
-  if (!initial) {
+  // Do not auto-load if first is a placeholder
+  const isPlaceholder = initial ? /^2\.\d+\s+Placeholder$/i.test(initial) : false;
+  if (!initial || isPlaceholder) {
     if (docEl) docEl.textContent = 'Select a policy';
-    return;
-  }
-
-  // Do not fetch a doc for placeholders
-  if (/^2\.\d+\s+Placeholder$/i.test(initial)) {
-    if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
     return;
   }
 
