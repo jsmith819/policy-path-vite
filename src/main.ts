@@ -11,14 +11,13 @@ let currentUsername: string | null = null;
 let tokenMap: TokenMap = loadTokenMap();
 let changeLog: ChangeLogEntry[] = loadChangeLog();
 
-// Expose for quick debugging in the browser console (unchanged)
+// Expose for quick debugging in the browser console
 (Object.assign(window as any, { tokenMap, changeLog }));
 
 /**
  * UPDATED:
- * - "1. The Individual" now has the full set of ten policies from your board
- *   (keeps "Commitment Statement") and adds "All procedures (22)" at the end.
- * - Other segments unchanged (fill out later as needed).
+ * - "1. The Individual" keeps full set.
+ * - "The organisation" now has 10 placeholder policies (2.1–2.10).
  */
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
@@ -36,8 +35,18 @@ const policiesData: Record<string, string[]> = {
     'All procedures (22)'
   ],
 
-  // Leave these as-is for now (you can expand later)
-  'The organisation': ['2.1 Partnering with individuals', '2.2 Quality, safety & inclusion'],
+  'The organisation': [
+    '2.1 Placeholder',
+    '2.2 Placeholder',
+    '2.3 Placeholder',
+    '2.4 Placeholder',
+    '2.5 Placeholder',
+    '2.6 Placeholder',
+    '2.7 Placeholder',
+    '2.8 Placeholder',
+    '2.9 Placeholder',
+    '2.10 Placeholder'
+  ],
   'Care and services': ['3.1 Assessment & planning', '3.2 Delivery of services'],
   'The environment': ['4.1a Services in home', '4.1b Services outside home'],
   'Clinical care': ['5.1 Clinical governance', '5.2 Infection control'],
@@ -185,10 +194,27 @@ closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).styl
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
 
-function selectSegment(segmentName: string, evt: Event) {
-  document.querySelectorAll('#policy-wheel path, #policy-wheel circle').forEach(el => el.classList.remove('active'));
-  (evt.currentTarget as Element)?.classList.add('active');
+/**
+ * UPDATED:
+ * - Accepts both raw segment ("The organisation") and compound key
+ *   ("The organisation::2.3") so wedge badges can open a specific item.
+ * - Skips loading docs for Placeholder items.
+ */
+function selectSegment(segmentOrKey: string, evt: Event) {
+  const [segmentName, policyId] = segmentOrKey.split('::');
 
+  // Clear active
+  document.querySelectorAll('#policy-wheel path, #policy-wheel circle')
+    .forEach(el => el.classList.remove('active'));
+
+  // Highlight the wedge if possible
+  const segEl = document.querySelector(
+    `#policy-wheel .seg[data-name="${segmentName.replace(/"/g, '\\"')}"]`
+  );
+  if (segEl) segEl.classList.add('active');
+  else (evt.currentTarget as Element)?.classList.add('active');
+
+  // Render list
   const policies = policiesDataLocal[segmentName] || [];
   const color = policyColorsLocal[segmentName] || '#1c2b4a';
 
@@ -199,10 +225,27 @@ function selectSegment(segmentName: string, evt: Event) {
     color
   );
 
-  const first = policies[0];
+  // Choose initial item
+  let initial = policies[0];
+  if (policyId) {
+    const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
+    if (m) initial = m;
+  }
+
   const docEl = document.getElementById('docContent');
-  if (docEl) docEl.textContent = first ? 'Loading…' : 'Select a policy';
-  if (first) loadAndRender(segmentName, first, tokenMap, changeLog);
+  if (!initial) {
+    if (docEl) docEl.textContent = 'Select a policy';
+    return;
+  }
+
+  // Do not fetch a doc for placeholders
+  if (/^2\.\d+\s+Placeholder$/i.test(initial)) {
+    if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
+    return;
+  }
+
+  if (docEl) docEl.textContent = 'Loading…';
+  loadAndRender(segmentName, initial, tokenMap, changeLog);
 }
 
 drawWheel(svgWheel, selectSegment);
