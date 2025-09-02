@@ -141,4 +141,4 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helve
   text-anchor: middle;
   dominant-baseline: central;
 }
-
+#policy-wheel .arc-label { text-anchor: middle; }

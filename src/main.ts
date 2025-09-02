@@ -35,6 +35,7 @@ const policiesData: Record<string, string[]> = {
 
   // 10 placeholders under The organisation (2.1–2.10)
   'The organisation': [
+    'Commitment Statement',
     '2.1 Placeholder',
     '2.2 Placeholder',
     '2.3 Placeholder',
