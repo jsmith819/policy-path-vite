@@ -13,15 +13,18 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
 const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
 const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s");
 
-// Map bracket variants to canonical token keys
+// Canonicalise token keys and support aliases (case-insensitive)
 function canonicalKey(k: string): string {
   const kk = (k || '').toLowerCase().trim();
-  if (kk === 'organisation' || kk === 'organization' || kk === 'organisation_name' || kk === 'organization_name')
+  if (kk === 'organisational' || kk === 'organizational') return 'organisation_name';
+  if (kk === 'organisation'   || kk === 'organization')   return 'organisation_name';
+  if (kk === 'organisation_name' || kk === 'organization_name' || kk === 'org' || kk === 'org_name')
     return 'organisation_name';
-  if (kk === 'resident' || kk === 'resident_name') return 'person';
+  if (kk === 'organisation_short' || kk === 'org_short')   return 'organisation_short';
+  if (kk === 'resident' || kk === 'resident_name' || kk === 'consumer') return 'person';
   if (kk === 'person' || kk === 'persons') return 'person';
   if (kk === 'service' || kk === 'service-type' || kk === 'service_type') return 'service_type';
-  return kk; // fall through (works for {{organisation_name}}, etc.)
+  return kk;
 }
 
 export function renderPolicies(
@@ -72,29 +75,34 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   upEl.classList.add('hidden');
 }
 
-// Token replacement with aliases and correct possessives
+// Replacement with aliases, possessives, and simple “123/123s/123’s” mapping
 export function replaceTokens(html: string, tokenMap: TokenMap) {
+  const get = (key: string) => (tokenMap as any)[key];
+
   let out = html;
 
-  // 1) Possessive bracket tokens first: [person's], [resident's], etc.
+  // Handle 123 placeholders used in some docs
+  const p = String(get('person') || '');
+  out = out.replace(/\b123['’]s\b/g, possessive(p));
+  out = out.replace(/\b123s\b/g, p ? (p.endsWith('s') ? p : p + 's') : '123s');
+  out = out.replace(/\b123\b/g, p || '123');
+
+  // Possessive bracket tokens: [key's] or [key’s]
   out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k: string) => {
-    const key = canonicalKey(k);
-    const val = (tokenMap as any)[key];
-    return val ? possessive(String(val)) : `[${k}'s]`;
+    const v = get(canonicalKey(k));
+    return v ? possessive(String(v)) : `[${k}'s]`;
   });
 
-  // 2) Non-possessive bracket tokens: [Organisation_name], [resident], [organisation], etc.
+  // Non-possessive bracket tokens: [Organisational], [organisation_name], [resident], etc.
   out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
-    const key = canonicalKey(k);
-    const val = (tokenMap as any)[key];
-    return (val ?? `[${k}]`) as string;
+    const v = get(canonicalKey(k));
+    return (v ?? `[${k}]`) as string;
   });
 
-  // 3) Curly tokens: {{ organisation_name }}, {{ service_type }}, etc.
+  // Curly tokens: {{ organisation_name }}, {{ organisation_short }}, {{ service_type }}, etc.
   out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
-    const key = canonicalKey(k);
-    const val = (tokenMap as any)[key];
-    return (val ?? `{{${k}}}`) as string;
+    const v = get(canonicalKey(k));
+    return (v ?? `{{${k}}}`) as string;
   });
 
   return out;
