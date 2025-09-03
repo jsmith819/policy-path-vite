@@ -48,7 +48,7 @@ const policiesData: Record<string, string[]> = {
     '2.10 Placeholder'
   ],
 
-  'Care and services': ['3.1 Assessment & planning', '3.2 Delivery of services'],
+  'Care and services': ['commitment statement','3.1 Assessment & planning', '3.2 Delivery of services'],
   'The environment': ['4.1a Services in home', '4.1b Services outside home'],
   'Clinical care': ['5.1 Clinical governance', '5.2 Infection control'],
   'Food and nutrition': ['6.1 Partnering on food', '6.2 Nutrition assessment'],
