@@ -32,8 +32,6 @@ const policiesData: Record<string, string[]> = {
     '1.10 Resident Engagement and Co-design',
     'All procedures (22)'
   ],
-
-  // 10 placeholders under The organisation (2.1–2.10)
   'The organisation': [
     'Commitment Statement',
     '2.1 Placeholder',
@@ -47,7 +45,6 @@ const policiesData: Record<string, string[]> = {
     '2.9 Placeholder',
     '2.10 Placeholder'
   ],
-
   'Care and services': ['commitment statement','3.1 Assessment & planning', '3.2 Delivery of services'],
   'The environment': ['commitment statement','4.1a Services in home', '4.1b Services outside home'],
   'Clinical care': ['5.1 Clinical governance', '5.2 Infection control'],
@@ -94,6 +91,7 @@ const closeResultsBtn = document.getElementById('closeResultsBtn')!;
 const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGSVGElement;
 
 const adminPopup    = document.getElementById('adminPopup')!;
+const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement; // NEW
 const orgInput      = document.getElementById('orgInput') as HTMLInputElement;
 const personInput   = document.getElementById('personInput') as HTMLInputElement;
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
@@ -127,9 +125,11 @@ loginBtn.addEventListener('click', () => {
     loginErrorEl.classList.remove('hidden');
   }
 });
+
 togglePw.addEventListener('click', () => {
   passField.type = (passField.type === 'password') ? 'text' : 'password';
 });
+
 logoutBtn.addEventListener('click', () => {
   mainAppEl.classList.add('hidden');
   loginScreenEl.classList.remove('hidden');
@@ -142,34 +142,51 @@ logoutBtn.addEventListener('click', () => {
 adminBtn.addEventListener('click', () => {
   adminMenu.style.display = (adminMenu.style.display === 'block') ? 'none' : 'block';
 });
+
 ctxSettings.addEventListener('click', () => {
   adminMenu.style.display = 'none';
-  orgInput.value = tokenMap.organisation_name;
-  personInput.value = tokenMap.person;
-  serviceInput.value = tokenMap.service_type;
+  orgInput.value      = tokenMap.organisation_name;
+  orgShortInput.value = (tokenMap as any).organisation_short || ''; // NEW
+  personInput.value   = tokenMap.person;
+  serviceInput.value  = tokenMap.service_type;
   (adminPopup as HTMLElement).style.display = 'block';
 });
+
 viewTemplate.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Template coming soon.'); });
 viewUpdates.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Updates coming soon.'); });
+
 demoReset.addEventListener('click', () => {
   adminMenu.style.display = 'none';
   if (!confirm('Really clear all change history?')) return;
   changeLog = [];
-  localStorage.setItem('changeLog', JSON.stringify(changeLog));
+  saveChangeLog(changeLog);
   changeLogContent.innerHTML = '<p>No changes yet.</p>';
   updatesContent.innerHTML = '<p>No updates for this document.</p>';
   updatesContent.classList.add('hidden');
 });
-toggleSearchBar.addEventListener('click', () => { searchContainer.classList.toggle('hidden'); adminMenu.style.display = 'none'; });
+
+toggleSearchBar.addEventListener('click', () => {
+  searchContainer.classList.toggle('hidden');
+  adminMenu.style.display = 'none';
+});
 
 saveTokensBtn.addEventListener('click', () => {
   const oldMap = { ...tokenMap };
-  tokenMap.organisation_name = (orgInput.value || '').trim();
-  tokenMap.person            = (personInput.value || '').trim();
-  tokenMap.service_type      = (serviceInput.value || '').trim();
+
+  tokenMap.organisation_name  = (orgInput.value || '').trim();
+  (tokenMap as any).organisation_short = (orgShortInput.value || '').trim(); // NEW
+  tokenMap.person             = (personInput.value || '').trim();
+  tokenMap.service_type       = (serviceInput.value || '').trim();
+
   const now = new Date().toISOString();
   tokenMap.updatedAt = now;
-  (['organisation_name','person','service_type'] as const).forEach(field => {
+
+  ([
+    'organisation_name',
+    'organisation_short', // NEW
+    'person',
+    'service_type'
+  ] as const).forEach((field: any) => {
     if ((tokenMap as any)[field] !== (oldMap as any)[field]) {
       const entry: ChangeLogEntry = {
         field,
@@ -181,8 +198,10 @@ saveTokensBtn.addEventListener('click', () => {
       changeLog.push(entry);
     }
   });
-  localStorage.setItem('tokenMap', JSON.stringify(tokenMap));
-  localStorage.setItem('changeLog', JSON.stringify(changeLog));
+
+  saveTokenMap(tokenMap);
+  saveChangeLog(changeLog);
+
   (adminPopup as HTMLElement).style.display = 'none';
   updateLastUpdated();
 });
@@ -196,7 +215,10 @@ trackChanges.addEventListener('click', () => {
   }).join('');
   (trackPopup as HTMLElement).style.display = 'block';
 });
-closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).style.display = 'none'; });
+
+closeTrackBtn.addEventListener('click', () => {
+  (trackPopup as HTMLElement).style.display = 'none';
+});
 
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
@@ -232,11 +254,12 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
   function getPolicies(segmentName: string): string[] {
     const target = segmentName.toLowerCase();
-    for (const key of Object.keys(policiesData)) {
-      if (key.toLowerCase() === target) return policiesData[key];
+    for (const key of Object.keys(policiesDataLocal)) {
+      if (key.toLowerCase() === target) return policiesDataLocal[key];
     }
     return [];
   }
+
   renderPolicies(
     segmentName,
     policies,
@@ -273,15 +296,13 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
-document.getElementById('updatesToggle')!.addEventListener('click', () => {
-  document.getElementById('updatesContent')!.classList.toggle('hidden');
+updateTabBtn.addEventListener('click', () => {
+  updatesContent.classList.toggle('hidden');
 });
 
-document.getElementById('searchBtn')!.addEventListener('click', () => {
-  const q = (document.getElementById('semanticSearch') as HTMLInputElement).value.toLowerCase().trim();
+searchBtn.addEventListener('click', () => {
+  const q = searchInput.value.toLowerCase().trim();
   const matches = searchDocs(q);
-  const resultsContent = document.getElementById('resultsContent')!;
-  const searchResults = document.getElementById('searchResults')!;
   resultsContent.innerHTML = '';
   if (!q) resultsContent.innerHTML = '<p>Please enter a search term.</p>';
   else if (matches.length === 0) resultsContent.innerHTML = '<p>No results found.</p>';
@@ -297,8 +318,9 @@ document.getElementById('searchBtn')!.addEventListener('click', () => {
   }
   searchResults.classList.remove('hidden');
 });
-document.getElementById('closeResultsBtn')!.addEventListener('click', () => {
-  document.getElementById('searchResults')!.classList.add('hidden');
+
+closeResultsBtn.addEventListener('click', () => {
+  searchResults.classList.add('hidden');
 });
 
 window.addEventListener('DOMContentLoaded', () => { indexDocuments(); });
