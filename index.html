@@ -10,8 +10,8 @@
     <div class="login-screen" id="loginScreen">
       <div class="login-box">
         <h3>Secure Login</h3>
-        <input id="username" placeholder="Username"/>
-        <input id="password" type="password" placeholder="Password"/>
+        <input id="username" placeholder="Username" />
+        <input id="password" type="password" placeholder="Password" />
         <div class="toggle-password" id="togglePw">Show Password</div>
         <button id="loginBtn">Enter</button>
         <p id="loginError" class="error hidden">Invalid credentials.</p>
@@ -21,6 +21,13 @@
     <div id="mainApp" class="main-app hidden">
       <div class="top-bar">
         <h1>Policy Path</h1>
+
+        <!-- Search moved into top bar -->
+        <div class="search-container" id="searchContainer">
+          <input id="semanticSearch" placeholder="Semantic search…" />
+          <button id="searchBtn">Search</button>
+        </div>
+
         <div id="updateBox">Last updated: Never</div>
         <button id="adminBtn">⚙️</button>
         <div id="adminMenu" class="dropdown">
@@ -36,10 +43,7 @@
         </div>
       </div>
 
-      <div class="search-container" id="searchContainer">
-        <input id="semanticSearch" placeholder="Semantic search..." />
-        <button id="searchBtn">Search</button>
-      </div>
+      <!-- Removed standalone search-container -->
 
       <div id="searchResults" class="card hidden">
         <div class="results-header">
@@ -67,10 +71,10 @@
         <h3>Admin: Contextual Settings</h3>
         <label>Short organisation name
           <input id="orgShortInput" placeholder="e.g., ACME Health" />
-        </label>        
-        <input id="orgInput" placeholder="Organisation Name"/>
-        <input id="personInput" placeholder="Person"/>
-        <input id="serviceInput" placeholder="Service Type"/>
+        </label>
+        <input id="orgInput" placeholder="Organisation Name" />
+        <input id="personInput" placeholder="Person" />
+        <input id="serviceInput" placeholder="Service Type" />
         <button id="saveTokensBtn">Save</button>
         <button id="viewTemplate2">View Template</button>
         <button id="viewUpdates2">View Updates</button>
