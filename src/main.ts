@@ -14,8 +14,7 @@ let changeLog: ChangeLogEntry[] = loadChangeLog();
 // Expose for debugging
 (Object.assign(window as any, { tokenMap, changeLog }));
 
-/* ---------------------------------- Data ---------------------------------- */
-
+/** Data */
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
     'Commitment Statement',
@@ -33,20 +32,13 @@ const policiesData: Record<string, string[]> = {
   ],
   'The organisation': [
     'Commitment Statement',
-    '2.1 Placeholder',
-    '2.2 Placeholder',
-    '2.3 Placeholder',
-    '2.4 Placeholder',
-    '2.5 Placeholder',
-    '2.6 Placeholder',
-    '2.7 Placeholder',
-    '2.8 Placeholder',
-    '2.9 Placeholder',
-    '2.10 Placeholder'
+    '2.1 Placeholder','2.2 Placeholder','2.3 Placeholder','2.4 Placeholder',
+    '2.5 Placeholder','2.6 Placeholder','2.7 Placeholder','2.8 Placeholder',
+    '2.9 Placeholder','2.10 Placeholder'
   ],
   'Care and services': ['commitment statement','3.1 Assessment & planning', '3.2 Delivery of services'],
   'The environment': ['commitment statement','4.1a Services in home', '4.1b Services outside home'],
-  'Clinical care': ['5.1 Clinical governance', '5.2 Infection control'],
+  'Clinical care': ['Clinical governance', 'Infection control'],
   'Food and nutrition': ['6.1 Partnering on food', '6.2 Nutrition assessment'],
   'Residential community': ['7.1 Daily living', '7.2 Transitions']
 };
@@ -61,8 +53,7 @@ const policyColors: Record<string, string> = {
   'Residential community': '#faa916'
 };
 
-/* ------------------------------- DOM bindings ------------------------------ */
-
+/** DOM */
 const loginScreenEl = document.getElementById('loginScreen')!;
 const mainAppEl     = document.getElementById('mainApp')!;
 const userField     = document.getElementById('username') as HTMLInputElement;
@@ -91,9 +82,9 @@ const closeResultsBtn = document.getElementById('closeResultsBtn')!;
 
 const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGSVGElement;
 
-const adminPopup    = document.getElementById('adminPopup')!;        // right drawer (contextualise)
-const drawerScrim   = document.getElementById('drawerScrim')!;       // right drawer scrim
-const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
+const adminPopup    = document.getElementById('adminPopup')!;           // Right drawer
+const updatesDrawer = document.getElementById('updatesDrawer')!;        // Left drawer
+const drawerScrim   = document.getElementById('drawerScrim')!;
 
 const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement;
 const orgInput      = document.getElementById('orgInput') as HTMLInputElement;
@@ -101,36 +92,24 @@ const personInput   = document.getElementById('personInput') as HTMLInputElement
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
 const saveTokensBtn = document.getElementById('saveTokensBtn')!;
 
-/* Updates left drawer */
-const updateTabBtn        = document.getElementById('updatesToggle') as HTMLButtonElement;
-const updatesDrawer       = document.getElementById('updatesDrawer') as HTMLElement | null;
-const updatesDrawerContent= document.getElementById('updatesDrawerContent') as HTMLElement | null;
-const updatesScrim        = document.getElementById('updatesScrim') as HTMLElement | null;
+const updateTabBtn  = document.getElementById('updatesToggle')!;
+const updatesContent= document.getElementById('updatesContent')!;
 
-/* Legacy inline panel (may or may not exist in markup; safe-guard) */
-const updatesContentInline = document.getElementById('updatesContent') as HTMLElement | null;
+const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
 
 const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
 const closeTrackBtn = document.getElementById('closeTrack')!;
 
-/* --------------------------------- Helpers -------------------------------- */
-
+/** Permissions */
 function applyPermissions() {
   document.querySelectorAll('#adminMenu li.admin-only').forEach(li => {
     (li as HTMLElement).style.display = (currentUserRole === 'admin') ? 'block' : 'none';
   });
 }
-
 function updateLastUpdated() { updateLastUpdatedUI(tokenMap); }
 
-function htmlEscape(s: string) {
-  return s.replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'} as any)[c]);
-}
-
-/* ------------------------------ Auth handling ----------------------------- */
-
+/** Auth */
 loginBtn.addEventListener('click', () => {
   const res = checkLogin(userField.value, passField.value);
   if (res.ok) {
@@ -145,11 +124,9 @@ loginBtn.addEventListener('click', () => {
     loginErrorEl.classList.remove('hidden');
   }
 });
-
 togglePw.addEventListener('click', () => {
   passField.type = (passField.type === 'password') ? 'text' : 'password';
 });
-
 logoutBtn.addEventListener('click', () => {
   mainAppEl.classList.add('hidden');
   loginScreenEl.classList.remove('hidden');
@@ -159,35 +136,37 @@ logoutBtn.addEventListener('click', () => {
   currentUsername = null;
 });
 
-/* --------------------- Admin menu + right drawer (context) ---------------- */
-
-adminBtn.addEventListener('click', () => {
-  adminMenu.style.display = (adminMenu.style.display === 'block') ? 'none' : 'block';
-});
-
+/** Drawers */
+const closeAllDrawers = () => {
+  adminPopup.classList.remove('open');
+  updatesDrawer.classList.remove('open');
+  drawerScrim.classList.remove('show');
+};
 const openContextDrawer = () => {
   adminMenu.style.display = 'none';
   orgInput.value      = tokenMap.organisation_name;
   orgShortInput.value = (tokenMap as any).organisation_short || '';
   personInput.value   = tokenMap.person;
   serviceInput.value  = tokenMap.service_type;
-  (adminPopup as HTMLElement).classList.add('open');
+  adminPopup.classList.add('open');
   drawerScrim.classList.add('show');
-  // Close left drawer if open
-  updatesDrawer?.classList.remove('open');
-  updatesScrim?.classList.remove('show');
+};
+const openUpdatesDrawer = () => {
+  updatesDrawer.classList.add('open');
+  drawerScrim.classList.add('show');
 };
 
-const closeContextDrawer = () => {
-  (adminPopup as HTMLElement).classList.remove('open');
-  drawerScrim.classList.remove('show');
-};
+adminBtn.addEventListener('click', () => {
+  adminMenu.style.display = (adminMenu.style.display === 'block') ? 'none' : 'block';
+});
+ctxSettings.addEventListener('click', openContextDrawer);
+openContextBtn.addEventListener('click', openContextDrawer);
+updateTabBtn.addEventListener('click', openUpdatesDrawer);
 
-ctxSettings?.addEventListener('click', openContextDrawer);
-openContextBtn?.addEventListener('click', openContextDrawer);
-drawerScrim.addEventListener('click', closeContextDrawer);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextDrawer(); closeUpdatesDrawer(); } });
+drawerScrim.addEventListener('click', closeAllDrawers);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllDrawers(); });
 
+/** Admin menu items */
 viewTemplate.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Template coming soon.'); });
 viewUpdates.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Updates coming soon.'); });
 
@@ -197,16 +176,10 @@ demoReset.addEventListener('click', () => {
   changeLog = [];
   saveChangeLog(changeLog);
   changeLogContent.innerHTML = '<p>No changes yet.</p>';
-  if (updatesContentInline) { updatesContentInline.innerHTML = '<p>No updates for this document.</p>'; updatesContentInline.classList.add('hidden'); }
+  updatesContent.innerHTML = '<p>No updates for this document.</p>';
 });
 
-toggleSearchBar.addEventListener('click', () => {
-  searchContainer.classList.toggle('hidden');
-  adminMenu.style.display = 'none';
-});
-
-/* ------------------------- Save contextual settings ----------------------- */
-
+/** Save contextual settings */
 saveTokensBtn.addEventListener('click', () => {
   const oldMap = { ...tokenMap };
 
@@ -218,104 +191,61 @@ saveTokensBtn.addEventListener('click', () => {
   const now = new Date().toISOString();
   tokenMap.updatedAt = now;
 
-  ([
-    'organisation_name',
-    'organisation_short',
-    'person',
-    'service_type'
-  ] as const).forEach((field: any) => {
-    if ((tokenMap as any)[field] !== (oldMap as any)[field]) {
-      const entry: ChangeLogEntry = {
-        field,
-        oldValue: (oldMap as any)[field],
-        newValue: (tokenMap as any)[field],
-        user: currentUsername || 'unknown',
-        timestamp: now
-      };
-      changeLog.push(entry);
-    }
-  });
+  (['organisation_name','organisation_short','person','service_type'] as const)
+    .forEach((field: any) => {
+      if ((tokenMap as any)[field] !== (oldMap as any)[field]) {
+        const entry: ChangeLogEntry = {
+          field,
+          oldValue: (oldMap as any)[field],
+          newValue: (tokenMap as any)[field],
+          user: currentUsername || 'unknown',
+          timestamp: now
+        };
+        changeLog.push(entry);
+      }
+    });
 
   saveTokenMap(tokenMap);
   saveChangeLog(changeLog);
 
   updateLastUpdated();
-  closeContextDrawer();
+  closeAllDrawers();
 });
 
-/* ---------------------------- Change log popup ---------------------------- */
-
+/** Change log modal */
 trackChanges.addEventListener('click', () => {
   adminMenu.style.display = 'none';
   if (!changeLog.length) changeLogContent.innerHTML = '<p>No changes yet.</p>';
   else changeLogContent.innerHTML = changeLog.map(e => {
     const ts = new Date(e.timestamp).toLocaleString();
-    return `<p><strong>${htmlEscape(ts)}</strong> — ${htmlEscape(e.user)} changed <em>${htmlEscape(e.field as string)}</em> from “${htmlEscape(String(e.oldValue ?? ''))}” to “${htmlEscape(String(e.newValue ?? ''))}”</p>`;
+    return `<p><strong>${ts}</strong> — ${e.user} changed <em>${e.field}</em> from “${e.oldValue}” to “${e.newValue}”</p>`;
   }).join('');
   (trackPopup as HTMLElement).style.display = 'block';
 });
 closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).style.display = 'none'; });
 
-/* ------------------------------ Updates drawer ---------------------------- */
-
-function openUpdatesDrawer() {
-  // Close right drawer if open
-  closeContextDrawer();
-
-  // Prefer prebuilt HTML (if ui.ts populated #updatesContent). Fallback to full change log.
-  let html = updatesContentInline?.innerHTML?.trim();
-  if (!html || html === '') {
-    html = changeLog.length
-      ? changeLog.map(e => {
-          const ts = new Date(e.timestamp).toLocaleString();
-          return `<p><strong>${htmlEscape(ts)}</strong> — ${htmlEscape(e.user)} changed <em>${htmlEscape(e.field as string)}</em> from “${htmlEscape(String(e.oldValue ?? ''))}” to “${htmlEscape(String(e.newValue ?? ''))}”</p>`;
-        }).join('')
-      : '<p>No updates for this document.</p>';
-  }
-  if (updatesDrawerContent) updatesDrawerContent.innerHTML = html;
-
-  updatesDrawer?.classList.add('open');
-  updatesScrim?.classList.add('show');
-}
-function closeUpdatesDrawer() {
-  updatesDrawer?.classList.remove('open');
-  updatesScrim?.classList.remove('show');
-}
-
-updateTabBtn?.addEventListener('click', openUpdatesDrawer);
-updatesScrim?.addEventListener('click', closeUpdatesDrawer);
-
-/* ------------------------------- Wheel logic ------------------------------ */
-
+/** Wheel + navigation */
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
 
-/** Case-insensitive resolver for segment keys */
 function resolveSegmentKey(name: string): string {
   const norm = (s: string) => s.toLowerCase().trim();
   const match = Object.keys(policiesDataLocal).find(k => norm(k) === norm(name));
   return match || name;
 }
 
-/**
- * Accepts raw segment ("The organisation") or compound key ("The organisation::2.3").
- * Shows list even if display text casing differs. Skips doc fetch for placeholders.
- */
 function selectSegment(segmentOrKey: string, evt: Event) {
   const [incomingName, policyId] = segmentOrKey.split('::');
   const segmentName = resolveSegmentKey(incomingName);
 
-  // Clear active
   document.querySelectorAll('#policy-wheel path, #policy-wheel circle')
     .forEach(el => el.classList.remove('active'));
 
-  // Highlight the exact wedge by matching data-name case-insensitively
   const segEl = Array.from(document.querySelectorAll('#policy-wheel .seg'))
     .find(el => (el as HTMLElement).getAttribute('data-name')?.toLowerCase() === incomingName.toLowerCase());
   if (segEl) segEl.classList.add('active');
   else (evt.currentTarget as Element)?.classList.add('active');
 
-  // Render list
   const policies = getPolicies(segmentName);
   const color = policyColorsLocal[segmentName] || '#1c2b4a';
 
@@ -331,7 +261,6 @@ function selectSegment(segmentOrKey: string, evt: Event) {
     segmentName,
     policies,
     (policy) => {
-      // Block placeholders
       if (/^2\.\d+\s+Placeholder$/i.test(policy)) {
         const docEl = document.getElementById('docContent');
         if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
@@ -342,7 +271,6 @@ function selectSegment(segmentOrKey: string, evt: Event) {
     color
   );
 
-  // Choose initial policy
   let initial = policies[0];
   if (policyId) {
     const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
@@ -350,7 +278,6 @@ function selectSegment(segmentOrKey: string, evt: Event) {
   }
 
   const docEl = document.getElementById('docContent');
-  // Do not auto-load if first is a placeholder
   const isPlaceholder = initial ? /^2\.\d+\s+Placeholder$/i.test(initial) : false;
   if (!initial || isPlaceholder) {
     if (docEl) docEl.textContent = 'Select a policy';
@@ -363,8 +290,7 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
-/* --------------------------------- Search --------------------------------- */
-
+/** Search */
 searchBtn.addEventListener('click', () => {
   const q = searchInput.value.toLowerCase().trim();
   const matches = searchDocs(q);
@@ -375,7 +301,7 @@ searchBtn.addEventListener('click', () => {
     for (const doc of matches) {
       const div = document.createElement('div');
       div.style.padding = '10px 0';
-      div.innerHTML = `<strong>${htmlEscape(doc.title)}</strong><br><button style="margin-top:5px;">View Document</button>`;
+      div.innerHTML = `<strong>${doc.title}</strong><br><button style="margin-top:5px;">View Document</button>`;
       const btn = div.querySelector('button')!;
       btn.addEventListener('click', () => { loadAndRender(doc.segment, doc.policy, tokenMap, changeLog); });
       resultsContent.appendChild(div);
@@ -385,6 +311,5 @@ searchBtn.addEventListener('click', () => {
 });
 closeResultsBtn.addEventListener('click', () => { searchResults.classList.add('hidden'); });
 
-/* ---------------------------------- Boot ---------------------------------- */
-
+/** Boot */
 window.addEventListener('DOMContentLoaded', () => { indexDocuments(); });

@@ -68,8 +68,10 @@
       <div id="docViewer" class="card">
         <div class="doc-header">
           <div id="updateTab" class="update-tab">
-            <button id="updatesToggle" aria-controls="updatesDrawer">Updates ▼</button>
+            <!-- Opens LEFT drawer -->
+            <button id="updatesToggle">Updates ▸</button>
           </div>
+          <!-- Opens RIGHT drawer -->
           <button
             id="openContextBtn"
             class="context-btn"
@@ -78,31 +80,24 @@
           >Contextualise ▸</button>
         </div>
 
-        <!-- Hidden source that ui.ts fills; mirrored into the drawer at open -->
-        <div id="updatesContent" class="hidden update-content"></div>
-
         <div id="docContent">Select a document</div>
       </div>
 
-      <!-- LEFT-SIDE Updates drawer -->
-      <div
+      <!-- LEFT: Updates drawer -->
+      <aside
         id="updatesDrawer"
-        class="drawer-left"
-        role="dialog"
-        aria-modal="true"
+        class="side-drawer left"
+        role="complementary"
         aria-labelledby="updatesDrawerTitle"
       >
-        <div class="drawer-header">
-          <h3 id="updatesDrawerTitle">Updates</h3>
-          <button id="closeUpdatesDrawer" class="icon-btn" aria-label="Close">×</button>
-        </div>
-        <div id="updatesDrawerContent" class="scroll"></div>
-      </div>
+        <h3 id="updatesDrawerTitle">Updates</h3>
+        <div id="updatesContent" class="scroll"></div>
+      </aside>
 
-      <!-- RIGHT-SIDE Contextualisation drawer (reused admin popup container) -->
+      <!-- RIGHT: Contextualisation drawer -->
       <div
-        class="popup"
         id="adminPopup"
+        class="side-drawer right"
         role="dialog"
         aria-modal="true"
         aria-labelledby="adminPopupTitle"
@@ -139,7 +134,7 @@
         <button id="closeTrack">Close</button>
       </div>
 
-      <!-- Scrim for drawers/modals -->
+      <!-- Scrim for drawers/modal -->
       <div id="drawerScrim" class="scrim" aria-hidden="true"></div>
     </div>
 
