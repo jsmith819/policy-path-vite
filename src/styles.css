@@ -152,3 +152,5 @@ body {
   .doc-header { flex-wrap:wrap; gap:.5rem; }
   .context-btn { width:100%; }
 }
+/* Temporary: hide stray bottom contextualise row if still present */
+.doc-actions, .contextualise-footer { display: none !important; }
