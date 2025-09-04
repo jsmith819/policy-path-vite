@@ -19,17 +19,14 @@
     </div>
 
     <div id="mainApp" class="main-app hidden">
-      <!-- Header -->
       <div class="top-bar">
         <h1>Policy Path</h1>
 
-        <!-- Search in header -->
         <div class="search-container" id="searchContainer">
           <input id="semanticSearch" placeholder="Semantic search…" />
           <button id="searchBtn">Search</button>
         </div>
 
-        <!-- Right side controls -->
         <div class="top-right">
           <div id="updateBox">Last updated: Never</div>
           <button id="adminBtn" aria-label="Admin">⚙️</button>
@@ -46,7 +43,6 @@
           </div>
         </div>
       </div>
-      <!-- /Header -->
 
       <div id="searchResults" class="card hidden">
         <div class="results-header">
@@ -63,22 +59,34 @@
       <div id="policies-list"></div>
 
       <div id="docViewer" class="card">
-        <div id="drawerScrim" class="scrim"></div>
         <div id="docContent">Select a document</div>
-        <div id="updateTab" class="update-tab">
-          <button id="updatesToggle">Updates ▼</button>
-          <div id="updatesContent" class="hidden update-content"></div>
+
+        <div class="doc-actions">
+          <div id="updateTab" class="update-tab">
+            <button id="updatesToggle">Updates ▼</button>
+            <div id="updatesContent" class="hidden update-content"></div>
+          </div>
+
+          <!-- New tab/button to open contextualisation drawer -->
+          <button id="openContextBtn" class="context-btn" aria-haspopup="dialog">Contextualise ▸</button>
         </div>
       </div>
 
+      <!-- Side drawer content (existing admin popup reused) -->
       <div class="popup" id="adminPopup">
         <h3>Admin: Contextual Settings</h3>
         <label>Short organisation name
           <input id="orgShortInput" placeholder="e.g., ACME Health" />
         </label>
-        <input id="orgInput" placeholder="Organisation Name" />
-        <input id="personInput" placeholder="Person" />
-        <input id="serviceInput" placeholder="Service Type" />
+        <label>Organisation Name
+          <input id="orgInput" placeholder="Organisation Name" />
+        </label>
+        <label>Person
+          <input id="personInput" placeholder="Person" />
+        </label>
+        <label>Service Type
+          <input id="serviceInput" placeholder="Service Type" />
+        </label>
         <button id="saveTokensBtn">Save</button>
         <button id="viewTemplate2">View Template</button>
         <button id="viewUpdates2">View Updates</button>
@@ -89,6 +97,9 @@
         <div id="changeLogContent" class="scroll"></div>
         <button id="closeTrack">Close</button>
       </div>
+
+      <!-- Scrim for side drawer -->
+      <div id="drawerScrim" class="scrim"></div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

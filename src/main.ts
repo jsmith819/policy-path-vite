@@ -103,8 +103,9 @@ const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
 const closeTrackBtn = document.getElementById('closeTrack')!;
 
-/* Side drawer scrim */
-const drawerScrim   = document.getElementById('drawerScrim')!;
+/* New: contextualise tab button and drawer scrim */
+const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
+const drawerScrim    = document.getElementById('drawerScrim')!;
 
 function applyPermissions() {
   document.querySelectorAll('#adminMenu li.admin-only').forEach(li => {
@@ -163,6 +164,7 @@ const closeDrawer = () => {
 };
 
 ctxSettings.addEventListener('click', openDrawer);
+if (openContextBtn) openContextBtn.addEventListener('click', openDrawer);
 drawerScrim.addEventListener('click', closeDrawer);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
