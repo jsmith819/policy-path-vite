@@ -1,3 +1,4 @@
+// src/ui.ts
 import type { ChangeLogEntry, TokenMap } from './types';
 import { filenameFor, fetchDocumentHtml } from './api';
 
@@ -17,10 +18,10 @@ const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s")
 function canonicalKey(k: string): string {
   const kk = (k || '').toLowerCase().trim();
   if (kk === 'organisational' || kk === 'organizational') return 'organisation_name';
-  if (kk === 'organisation'   || kk === 'organization')   return 'organisation_name';
+  if (kk === 'organisation' || kk === 'organization') return 'organisation_name';
   if (kk === 'organisation_name' || kk === 'organization_name' || kk === 'org' || kk === 'org_name')
     return 'organisation_name';
-  if (kk === 'organisation_short' || kk === 'org_short')   return 'organisation_short';
+  if (kk === 'organisation_short' || kk === 'org_short') return 'organisation_short';
   if (kk === 'resident' || kk === 'resident_name' || kk === 'consumer') return 'person';
   if (kk === 'person' || kk === 'persons') return 'person';
   if (kk === 'service' || kk === 'service-type' || kk === 'service_type') return 'service_type';
@@ -50,10 +51,12 @@ export function renderPolicies(
   });
 }
 
+/** Build the Updates drawer content (left side). */
 export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   const upEl = document.getElementById('updatesContent');
   if (!upEl) return;
 
+  // Find all token keys referenced in the document
   const CURLY  = /\{\{\s*([\w_]+)\s*\}\}/gi;
   const SQUARE = /\[\s*([\w_]+)\s*(?:['’]s)?\s*\]/gi;
 
@@ -61,18 +64,37 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   for (const m of html.matchAll(CURLY))  tokens.add(canonicalKey(m[1] || ''));
   for (const m of html.matchAll(SQUARE)) tokens.add(canonicalKey(m[1] || ''));
 
+  // Filter relevant changelog entries and sort newest first
   const relevant = Array.isArray(changeLog)
-    ? changeLog.filter(e => tokens.has(canonicalKey(e.field as string)))
+    ? changeLog
+        .filter(e => tokens.has(canonicalKey(e.field as string)))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     : [];
 
-  upEl.innerHTML = relevant.length
-    ? relevant.map(e => {
-        const ts = new Date(e.timestamp).toLocaleString();
-        return `<p><strong>${ts}</strong> — ${e.user} changed <em>${e.field}</em> from “${e.oldValue}” to “${e.newValue}”</p>`;
-      }).join('')
-    : '<p>No updates for this document.</p>';
+  if (!relevant.length) {
+    upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
+    upEl.classList.remove('hidden');
+    return;
+  }
 
-  upEl.classList.add('hidden');
+  const items = relevant.map(e => {
+    const ts = new Date(e.timestamp).toLocaleString();
+    const field = canonicalKey(String(e.field || ''));
+    const oldV = String(e.oldValue ?? '—');
+    const newV = String(e.newValue ?? '—');
+    const who  = String(e.user || 'unknown');
+    return `
+      <li class="update-item">
+        <div class="update-head"><strong>${ts}</strong> — ${who}</div>
+        <div class="update-body">Changed <em>${field}</em><br>
+          <span class="delta"><span class="from">“${oldV}”</span> → <span class="to">“${newV}”</span></span>
+        </div>
+      </li>
+    `;
+  }).join('');
+
+  upEl.innerHTML = `<ul class="updates-list">${items}</ul>`;
+  upEl.classList.remove('hidden'); // ensure visible inside the drawer
 }
 
 // Replacement with aliases, possessives, and simple “123/123s/123’s” mapping
@@ -93,13 +115,13 @@ export function replaceTokens(html: string, tokenMap: TokenMap) {
     return v ? possessive(String(v)) : `[${k}'s]`;
   });
 
-  // Non-possessive bracket tokens: [Organisational], [organisation_name], [resident], etc.
+  // Non-possessive bracket tokens
   out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
     const v = get(canonicalKey(k));
     return (v ?? `[${k}]`) as string;
   });
 
-  // Curly tokens: {{ organisation_name }}, {{ organisation_short }}, {{ service_type }}, etc.
+  // Curly tokens
   out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
     const v = get(canonicalKey(k));
     return (v ?? `{{${k}}}`) as string;
@@ -121,10 +143,13 @@ export async function loadAndRender(
     const html = await fetchDocumentHtml(fileName);
     const tokenised = replaceTokens(html, tokenMap);
     if (docEl) docEl.innerHTML = tokenised;
-    buildUpdatesPanel(html, changeLog);
+    buildUpdatesPanel(html, changeLog); // fill left drawer
   } catch (err: any) {
     if (docEl) docEl.innerHTML = `<p>Error loading document: ${String(err?.message || err)}</p>`;
     const upEl = document.getElementById('updatesContent');
-    if (upEl) { upEl.innerHTML = '<p>No updates for this document.</p>'; upEl.classList.add('hidden'); }
+    if (upEl) {
+      upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
+      upEl.classList.remove('hidden');
+    }
   }
 }
