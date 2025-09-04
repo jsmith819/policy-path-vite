@@ -59,13 +59,17 @@
       <div id="policies-list"></div>
 
       <div id="docViewer" class="card">
-        <div id="docContent">Select a document</div>
-
-        <div class="doc-actions">
+        <div class="doc-header">
           <div id="updateTab" class="update-tab">
             <button id="updatesToggle">Updates ▼</button>
-            <div id="updatesContent" class="hidden update-content"></div>
           </div>
+          <button id="openContextBtn" class="context-btn" aria-haspopup="dialog">Contextualise ▸</button>
+        </div>
+      
+        <div id="updatesContent" class="hidden update-content"></div>
+        <div id="docContent">Select a document</div>
+      </div>
+      
 
           <!-- New tab/button to open contextualisation drawer -->
           <button id="openContextBtn" class="context-btn" aria-haspopup="dialog">Contextualise ▸</button>
