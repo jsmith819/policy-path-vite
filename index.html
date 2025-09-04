@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
+    <!-- Login -->
     <div class="login-screen" id="loginScreen">
       <div class="login-box">
         <h3>Secure Login</h3>
@@ -18,7 +19,9 @@
       </div>
     </div>
 
+    <!-- App -->
     <div id="mainApp" class="main-app hidden">
+      <!-- Top bar -->
       <div class="top-bar">
         <h1>Policy Path</h1>
 
@@ -44,6 +47,7 @@
         </div>
       </div>
 
+      <!-- Search results -->
       <div id="searchResults" class="card hidden">
         <div class="results-header">
           <h3>Search Results</h3>
@@ -52,58 +56,74 @@
         <div id="resultsContent"></div>
       </div>
 
+      <!-- Wheel -->
       <div id="circle-menu">
         <svg id="policy-wheel" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
 
+      <!-- Policies list -->
       <div id="policies-list"></div>
 
+      <!-- Document viewer -->
       <div id="docViewer" class="card">
         <div class="doc-header">
           <div id="updateTab" class="update-tab">
             <button id="updatesToggle">Updates ▼</button>
           </div>
-          <button id="openContextBtn" class="context-btn" aria-haspopup="dialog">Contextualise ▸</button>
+          <button
+            id="openContextBtn"
+            class="context-btn"
+            aria-haspopup="dialog"
+            aria-controls="adminPopup"
+          >Contextualise ▸</button>
         </div>
-      
+
         <div id="updatesContent" class="hidden update-content"></div>
         <div id="docContent">Select a document</div>
       </div>
-      
 
-          <!-- New tab/button to open contextualisation drawer -->
-          <button id="openContextBtn" class="context-btn" aria-haspopup="dialog">Contextualise ▸</button>
-        </div>
-      </div>
+      <!-- Contextualisation drawer (reusing admin popup container) -->
+      <div
+        class="popup"
+        id="adminPopup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adminPopupTitle"
+      >
+        <h3 id="adminPopupTitle">Contextual Settings</h3>
 
-      <!-- Side drawer content (existing admin popup reused) -->
-      <div class="popup" id="adminPopup">
-        <h3>Admin: Contextual Settings</h3>
-        <label>Short organisation name
-          <input id="orgShortInput" placeholder="e.g., ACME Health" />
-        </label>
-        <label>Organisation Name
-          <input id="orgInput" placeholder="Organisation Name" />
-        </label>
-        <label>Person
-          <input id="personInput" placeholder="Person" />
-        </label>
-        <label>Service Type
-          <input id="serviceInput" placeholder="Service Type" />
-        </label>
+        <label for="orgShortInput">Short organisation name</label>
+        <input id="orgShortInput" placeholder="e.g., ACME Health" />
+
+        <label for="orgInput">Organisation Name</label>
+        <input id="orgInput" placeholder="Organisation Name" />
+
+        <label for="personInput">Person</label>
+        <input id="personInput" placeholder="Person" />
+
+        <label for="serviceInput">Service Type</label>
+        <input id="serviceInput" placeholder="Service Type" />
+
         <button id="saveTokensBtn">Save</button>
-        <button id="viewTemplate2">View Template</button>
-        <button id="viewUpdates2">View Updates</button>
+        <button id="viewTemplate2" type="button">View Template</button>
+        <button id="viewUpdates2" type="button">View Updates</button>
       </div>
 
-      <div class="popup" id="trackPopup">
-        <h3>Change Log</h3>
+      <!-- Change log modal -->
+      <div
+        class="popup"
+        id="trackPopup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trackPopupTitle"
+      >
+        <h3 id="trackPopupTitle">Change Log</h3>
         <div id="changeLogContent" class="scroll"></div>
         <button id="closeTrack">Close</button>
       </div>
 
-      <!-- Scrim for side drawer -->
-      <div id="drawerScrim" class="scrim"></div>
+      <!-- Scrim for drawer/modal -->
+      <div id="drawerScrim" class="scrim" aria-hidden="true"></div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
