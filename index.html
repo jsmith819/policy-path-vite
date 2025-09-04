@@ -19,36 +19,39 @@
     </div>
 
     <div id="mainApp" class="main-app hidden">
+      <!-- Header -->
       <div class="top-bar">
         <h1>Policy Path</h1>
 
-        <!-- Search moved into top bar -->
+        <!-- Search in header -->
         <div class="search-container" id="searchContainer">
           <input id="semanticSearch" placeholder="Semantic search…" />
           <button id="searchBtn">Search</button>
         </div>
+
+        <!-- Right side controls -->
         <div class="top-right">
-        <div id="updateBox">Last updated: Never</div>
-        <button id="adminBtn">⚙️</button>
-        <div id="adminMenu" class="dropdown">
-          <ul>
-            <li class="admin-only" id="ctxSettings">Contextual Settings</li>
-            <li class="admin-only" id="viewTemplate">View Template</li>
-            <li class="admin-only" id="viewUpdates">View Updates</li>
-            <li id="trackChanges">Track Changes</li>
-            <li class="admin-only" id="demoReset">Demo Reset</li>
-            <li class="admin-only" id="toggleSearchBar">Toggle Search Bar</li>
-            <li id="logout">Logout</li>
-          </ul>
+          <div id="updateBox">Last updated: Never</div>
+          <button id="adminBtn" aria-label="Admin">⚙️</button>
+          <div id="adminMenu" class="dropdown">
+            <ul>
+              <li class="admin-only" id="ctxSettings">Contextual Settings</li>
+              <li class="admin-only" id="viewTemplate">View Template</li>
+              <li class="admin-only" id="viewUpdates">View Updates</li>
+              <li id="trackChanges">Track Changes</li>
+              <li class="admin-only" id="demoReset">Demo Reset</li>
+              <li class="admin-only" id="toggleSearchBar">Toggle Search Bar</li>
+              <li id="logout">Logout</li>
+            </ul>
+          </div>
         </div>
       </div>
-
-      <!-- Removed standalone search-container -->
+      <!-- /Header -->
 
       <div id="searchResults" class="card hidden">
         <div class="results-header">
           <h3>Search Results</h3>
-          <button id="closeResultsBtn" class="icon-btn">×</button>
+          <button id="closeResultsBtn" class="icon-btn" aria-label="Close">×</button>
         </div>
         <div id="resultsContent"></div>
       </div>
