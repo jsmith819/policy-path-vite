@@ -91,7 +91,7 @@ const closeResultsBtn = document.getElementById('closeResultsBtn')!;
 const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGSVGElement;
 
 const adminPopup    = document.getElementById('adminPopup')!;
-const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement; // NEW
+const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement;
 const orgInput      = document.getElementById('orgInput') as HTMLInputElement;
 const personInput   = document.getElementById('personInput') as HTMLInputElement;
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
@@ -103,6 +103,9 @@ const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
 const closeTrackBtn = document.getElementById('closeTrack')!;
 
+/* Side drawer scrim */
+const drawerScrim   = document.getElementById('drawerScrim')!;
+
 function applyPermissions() {
   document.querySelectorAll('#adminMenu li.admin-only').forEach(li => {
     (li as HTMLElement).style.display = (currentUserRole === 'admin') ? 'block' : 'none';
@@ -111,6 +114,7 @@ function applyPermissions() {
 
 function updateLastUpdated() { updateLastUpdatedUI(tokenMap); }
 
+/* Auth */
 loginBtn.addEventListener('click', () => {
   const res = checkLogin(userField.value, passField.value);
   if (res.ok) {
@@ -139,18 +143,28 @@ logoutBtn.addEventListener('click', () => {
   currentUsername = null;
 });
 
+/* Admin menu + drawer open/close */
 adminBtn.addEventListener('click', () => {
   adminMenu.style.display = (adminMenu.style.display === 'block') ? 'none' : 'block';
 });
 
-ctxSettings.addEventListener('click', () => {
+const openDrawer = () => {
   adminMenu.style.display = 'none';
-  orgInput.value      = tokenMap.organisation_name;
-  orgShortInput.value = (tokenMap as any).organisation_short || ''; // NEW
-  personInput.value   = tokenMap.person;
-  serviceInput.value  = tokenMap.service_type;
-  (adminPopup as HTMLElement).style.display = 'block';
-});
+  orgInput.value = tokenMap.organisation_name;
+  orgShortInput.value = (tokenMap as any).organisation_short || '';
+  personInput.value = tokenMap.person;
+  serviceInput.value = tokenMap.service_type;
+  (adminPopup as HTMLElement).classList.add('open');
+  drawerScrim.classList.add('show');
+};
+const closeDrawer = () => {
+  (adminPopup as HTMLElement).classList.remove('open');
+  drawerScrim.classList.remove('show');
+};
+
+ctxSettings.addEventListener('click', openDrawer);
+drawerScrim.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
 viewTemplate.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Template coming soon.'); });
 viewUpdates.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Updates coming soon.'); });
@@ -170,11 +184,12 @@ toggleSearchBar.addEventListener('click', () => {
   adminMenu.style.display = 'none';
 });
 
+/* Save contextual settings */
 saveTokensBtn.addEventListener('click', () => {
   const oldMap = { ...tokenMap };
 
   tokenMap.organisation_name  = (orgInput.value || '').trim();
-  (tokenMap as any).organisation_short = (orgShortInput.value || '').trim(); // NEW
+  (tokenMap as any).organisation_short = (orgShortInput.value || '').trim();
   tokenMap.person             = (personInput.value || '').trim();
   tokenMap.service_type       = (serviceInput.value || '').trim();
 
@@ -183,7 +198,7 @@ saveTokensBtn.addEventListener('click', () => {
 
   ([
     'organisation_name',
-    'organisation_short', // NEW
+    'organisation_short',
     'person',
     'service_type'
   ] as const).forEach((field: any) => {
@@ -202,10 +217,11 @@ saveTokensBtn.addEventListener('click', () => {
   saveTokenMap(tokenMap);
   saveChangeLog(changeLog);
 
-  (adminPopup as HTMLElement).style.display = 'none';
+  closeDrawer();
   updateLastUpdated();
 });
 
+/* Change log popup */
 trackChanges.addEventListener('click', () => {
   adminMenu.style.display = 'none';
   if (!changeLog.length) changeLogContent.innerHTML = '<p>No changes yet.</p>';
@@ -215,10 +231,7 @@ trackChanges.addEventListener('click', () => {
   }).join('');
   (trackPopup as HTMLElement).style.display = 'block';
 });
-
-closeTrackBtn.addEventListener('click', () => {
-  (trackPopup as HTMLElement).style.display = 'none';
-});
+closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).style.display = 'none'; });
 
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
@@ -296,10 +309,12 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
+/* Updates toggle */
 updateTabBtn.addEventListener('click', () => {
   updatesContent.classList.toggle('hidden');
 });
 
+/* Search */
 searchBtn.addEventListener('click', () => {
   const q = searchInput.value.toLowerCase().trim();
   const matches = searchDocs(q);
@@ -318,9 +333,7 @@ searchBtn.addEventListener('click', () => {
   }
   searchResults.classList.remove('hidden');
 });
+closeResultsBtn.addEventListener('click', () => { searchResults.classList.add('hidden'); });
 
-closeResultsBtn.addEventListener('click', () => {
-  searchResults.classList.add('hidden');
-});
-
+/* Boot */
 window.addEventListener('DOMContentLoaded', () => { indexDocuments(); });

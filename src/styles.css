@@ -112,3 +112,30 @@ body {
   .search-container { width:100%; }
   .search-container input { min-width:0; }
 }
+/* —— Side context drawer (reuses #adminPopup) —— */
+#adminPopup{
+  display:block;                  /* override .popup */
+  position:fixed; top:0; right:0; left:auto;
+  height:100vh; width:340px; max-width:90vw;
+  transform:translateX(100%);
+  transition:transform .25s ease;
+  padding:16px; background:#fff;
+  box-shadow:-16px 0 24px rgba(0,0,0,.15);
+  z-index:1100; border-radius:0;
+  overflow:auto;
+}
+#adminPopup.open{ transform:translateX(0); }
+#adminPopup h3{ margin:0 0 .75rem; }
+#adminPopup label{ display:block; font-size:.9rem; margin:.75rem 0 .25rem; color:#333; }
+#adminPopup input{ width:100%; padding:.5rem .6rem; border:1px solid #ccc; border-radius:6px; }
+#adminPopup #saveTokensBtn{
+  margin-top:1rem; width:100%; padding:.6rem .9rem;
+  background:#1c2b4a; color:#fff; border:0; border-radius:6px; cursor:pointer;
+}
+
+/* Dim background when drawer is open */
+.scrim{
+  position:fixed; inset:0; background:rgba(0,0,0,.35);
+  opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:1090;
+}
+.scrim.show{ opacity:1; pointer-events:auto; }
