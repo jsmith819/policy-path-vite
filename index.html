@@ -68,7 +68,7 @@
       <div id="docViewer" class="card">
         <div class="doc-header">
           <div id="updateTab" class="update-tab">
-            <button id="updatesToggle">Updates ▼</button>
+            <button id="updatesToggle" aria-controls="updatesDrawer">Updates ▼</button>
           </div>
           <button
             id="openContextBtn"
@@ -78,11 +78,28 @@
           >Contextualise ▸</button>
         </div>
 
+        <!-- Hidden source that ui.ts fills; mirrored into the drawer at open -->
         <div id="updatesContent" class="hidden update-content"></div>
+
         <div id="docContent">Select a document</div>
       </div>
 
-      <!-- Contextualisation drawer (reusing admin popup container) -->
+      <!-- LEFT-SIDE Updates drawer -->
+      <div
+        id="updatesDrawer"
+        class="drawer-left"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="updatesDrawerTitle"
+      >
+        <div class="drawer-header">
+          <h3 id="updatesDrawerTitle">Updates</h3>
+          <button id="closeUpdatesDrawer" class="icon-btn" aria-label="Close">×</button>
+        </div>
+        <div id="updatesDrawerContent" class="scroll"></div>
+      </div>
+
+      <!-- RIGHT-SIDE Contextualisation drawer (reused admin popup container) -->
       <div
         class="popup"
         id="adminPopup"
@@ -122,7 +139,7 @@
         <button id="closeTrack">Close</button>
       </div>
 
-      <!-- Scrim for drawer/modal -->
+      <!-- Scrim for drawers/modals -->
       <div id="drawerScrim" class="scrim" aria-hidden="true"></div>
     </div>
 

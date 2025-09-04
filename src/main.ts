@@ -14,9 +14,8 @@ let changeLog: ChangeLogEntry[] = loadChangeLog();
 // Expose for debugging
 (Object.assign(window as any, { tokenMap, changeLog }));
 
-/**
- * Data
- */
+/* ---------------------------------- Data ---------------------------------- */
+
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
     'Commitment Statement',
@@ -62,6 +61,8 @@ const policyColors: Record<string, string> = {
   'Residential community': '#faa916'
 };
 
+/* ------------------------------- DOM bindings ------------------------------ */
+
 const loginScreenEl = document.getElementById('loginScreen')!;
 const mainAppEl     = document.getElementById('mainApp')!;
 const userField     = document.getElementById('username') as HTMLInputElement;
@@ -90,22 +91,30 @@ const closeResultsBtn = document.getElementById('closeResultsBtn')!;
 
 const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGSVGElement;
 
-const adminPopup    = document.getElementById('adminPopup')!;
+const adminPopup    = document.getElementById('adminPopup')!;        // right drawer (contextualise)
+const drawerScrim   = document.getElementById('drawerScrim')!;       // right drawer scrim
+const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
+
 const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement;
 const orgInput      = document.getElementById('orgInput') as HTMLInputElement;
 const personInput   = document.getElementById('personInput') as HTMLInputElement;
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
 const saveTokensBtn = document.getElementById('saveTokensBtn')!;
-const updateTabBtn  = document.getElementById('updatesToggle')!;
-const updatesContent= document.getElementById('updatesContent')!;
+
+/* Updates left drawer */
+const updateTabBtn        = document.getElementById('updatesToggle') as HTMLButtonElement;
+const updatesDrawer       = document.getElementById('updatesDrawer') as HTMLElement | null;
+const updatesDrawerContent= document.getElementById('updatesDrawerContent') as HTMLElement | null;
+const updatesScrim        = document.getElementById('updatesScrim') as HTMLElement | null;
+
+/* Legacy inline panel (may or may not exist in markup; safe-guard) */
+const updatesContentInline = document.getElementById('updatesContent') as HTMLElement | null;
 
 const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
 const closeTrackBtn = document.getElementById('closeTrack')!;
 
-/* New: contextualise tab button and drawer scrim */
-const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
-const drawerScrim    = document.getElementById('drawerScrim')!;
+/* --------------------------------- Helpers -------------------------------- */
 
 function applyPermissions() {
   document.querySelectorAll('#adminMenu li.admin-only').forEach(li => {
@@ -115,7 +124,13 @@ function applyPermissions() {
 
 function updateLastUpdated() { updateLastUpdatedUI(tokenMap); }
 
-/* Auth */
+function htmlEscape(s: string) {
+  return s.replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'} as any)[c]);
+}
+
+/* ------------------------------ Auth handling ----------------------------- */
+
 loginBtn.addEventListener('click', () => {
   const res = checkLogin(userField.value, passField.value);
   if (res.ok) {
@@ -144,29 +159,34 @@ logoutBtn.addEventListener('click', () => {
   currentUsername = null;
 });
 
-/* Admin menu + drawer open/close */
+/* --------------------- Admin menu + right drawer (context) ---------------- */
+
 adminBtn.addEventListener('click', () => {
   adminMenu.style.display = (adminMenu.style.display === 'block') ? 'none' : 'block';
 });
 
-const openDrawer = () => {
+const openContextDrawer = () => {
   adminMenu.style.display = 'none';
-  orgInput.value = tokenMap.organisation_name;
+  orgInput.value      = tokenMap.organisation_name;
   orgShortInput.value = (tokenMap as any).organisation_short || '';
-  personInput.value = tokenMap.person;
-  serviceInput.value = tokenMap.service_type;
+  personInput.value   = tokenMap.person;
+  serviceInput.value  = tokenMap.service_type;
   (adminPopup as HTMLElement).classList.add('open');
   drawerScrim.classList.add('show');
+  // Close left drawer if open
+  updatesDrawer?.classList.remove('open');
+  updatesScrim?.classList.remove('show');
 };
-const closeDrawer = () => {
+
+const closeContextDrawer = () => {
   (adminPopup as HTMLElement).classList.remove('open');
   drawerScrim.classList.remove('show');
 };
 
-ctxSettings.addEventListener('click', openDrawer);
-if (openContextBtn) openContextBtn.addEventListener('click', openDrawer);
-drawerScrim.addEventListener('click', closeDrawer);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+ctxSettings?.addEventListener('click', openContextDrawer);
+openContextBtn?.addEventListener('click', openContextDrawer);
+drawerScrim.addEventListener('click', closeContextDrawer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextDrawer(); closeUpdatesDrawer(); } });
 
 viewTemplate.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Template coming soon.'); });
 viewUpdates.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Updates coming soon.'); });
@@ -177,8 +197,7 @@ demoReset.addEventListener('click', () => {
   changeLog = [];
   saveChangeLog(changeLog);
   changeLogContent.innerHTML = '<p>No changes yet.</p>';
-  updatesContent.innerHTML = '<p>No updates for this document.</p>';
-  updatesContent.classList.add('hidden');
+  if (updatesContentInline) { updatesContentInline.innerHTML = '<p>No updates for this document.</p>'; updatesContentInline.classList.add('hidden'); }
 });
 
 toggleSearchBar.addEventListener('click', () => {
@@ -186,7 +205,8 @@ toggleSearchBar.addEventListener('click', () => {
   adminMenu.style.display = 'none';
 });
 
-/* Save contextual settings */
+/* ------------------------- Save contextual settings ----------------------- */
+
 saveTokensBtn.addEventListener('click', () => {
   const oldMap = { ...tokenMap };
 
@@ -219,21 +239,53 @@ saveTokensBtn.addEventListener('click', () => {
   saveTokenMap(tokenMap);
   saveChangeLog(changeLog);
 
-  closeDrawer();
   updateLastUpdated();
+  closeContextDrawer();
 });
 
-/* Change log popup */
+/* ---------------------------- Change log popup ---------------------------- */
+
 trackChanges.addEventListener('click', () => {
   adminMenu.style.display = 'none';
   if (!changeLog.length) changeLogContent.innerHTML = '<p>No changes yet.</p>';
   else changeLogContent.innerHTML = changeLog.map(e => {
     const ts = new Date(e.timestamp).toLocaleString();
-    return `<p><strong>${ts}</strong> — ${e.user} changed <em>${e.field}</em> from “${e.oldValue}” to “${e.newValue}”</p>`;
+    return `<p><strong>${htmlEscape(ts)}</strong> — ${htmlEscape(e.user)} changed <em>${htmlEscape(e.field as string)}</em> from “${htmlEscape(String(e.oldValue ?? ''))}” to “${htmlEscape(String(e.newValue ?? ''))}”</p>`;
   }).join('');
   (trackPopup as HTMLElement).style.display = 'block';
 });
 closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).style.display = 'none'; });
+
+/* ------------------------------ Updates drawer ---------------------------- */
+
+function openUpdatesDrawer() {
+  // Close right drawer if open
+  closeContextDrawer();
+
+  // Prefer prebuilt HTML (if ui.ts populated #updatesContent). Fallback to full change log.
+  let html = updatesContentInline?.innerHTML?.trim();
+  if (!html || html === '') {
+    html = changeLog.length
+      ? changeLog.map(e => {
+          const ts = new Date(e.timestamp).toLocaleString();
+          return `<p><strong>${htmlEscape(ts)}</strong> — ${htmlEscape(e.user)} changed <em>${htmlEscape(e.field as string)}</em> from “${htmlEscape(String(e.oldValue ?? ''))}” to “${htmlEscape(String(e.newValue ?? ''))}”</p>`;
+        }).join('')
+      : '<p>No updates for this document.</p>';
+  }
+  if (updatesDrawerContent) updatesDrawerContent.innerHTML = html;
+
+  updatesDrawer?.classList.add('open');
+  updatesScrim?.classList.add('show');
+}
+function closeUpdatesDrawer() {
+  updatesDrawer?.classList.remove('open');
+  updatesScrim?.classList.remove('show');
+}
+
+updateTabBtn?.addEventListener('click', openUpdatesDrawer);
+updatesScrim?.addEventListener('click', closeUpdatesDrawer);
+
+/* ------------------------------- Wheel logic ------------------------------ */
 
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
@@ -311,12 +363,8 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
-/* Updates toggle */
-updateTabBtn.addEventListener('click', () => {
-  updatesContent.classList.toggle('hidden');
-});
+/* --------------------------------- Search --------------------------------- */
 
-/* Search */
 searchBtn.addEventListener('click', () => {
   const q = searchInput.value.toLowerCase().trim();
   const matches = searchDocs(q);
@@ -327,7 +375,7 @@ searchBtn.addEventListener('click', () => {
     for (const doc of matches) {
       const div = document.createElement('div');
       div.style.padding = '10px 0';
-      div.innerHTML = `<strong>${doc.title}</strong><br><button style="margin-top:5px;">View Document</button>`;
+      div.innerHTML = `<strong>${htmlEscape(doc.title)}</strong><br><button style="margin-top:5px;">View Document</button>`;
       const btn = div.querySelector('button')!;
       btn.addEventListener('click', () => { loadAndRender(doc.segment, doc.policy, tokenMap, changeLog); });
       resultsContent.appendChild(div);
@@ -337,5 +385,6 @@ searchBtn.addEventListener('click', () => {
 });
 closeResultsBtn.addEventListener('click', () => { searchResults.classList.add('hidden'); });
 
-/* Boot */
+/* ---------------------------------- Boot ---------------------------------- */
+
 window.addEventListener('DOMContentLoaded', () => { indexDocuments(); });
