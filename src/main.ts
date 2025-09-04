@@ -82,8 +82,9 @@ const closeResultsBtn = document.getElementById('closeResultsBtn')!;
 
 const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGSVGElement;
 
-const adminPopup    = document.getElementById('adminPopup')!;           // Right drawer
-const updatesDrawer = document.getElementById('updatesDrawer')!;        // Left drawer
+/* Drawers */
+const adminPopup    = document.getElementById('adminPopup')!;      // Right drawer
+const updatesDrawer = document.getElementById('updatesDrawer')!;   // Left drawer
 const drawerScrim   = document.getElementById('drawerScrim')!;
 
 const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement;
@@ -141,7 +142,10 @@ const closeAllDrawers = () => {
   adminPopup.classList.remove('open');
   updatesDrawer.classList.remove('open');
   drawerScrim.classList.remove('show');
+  // keep the list hidden until the drawer is reopened
+  updatesContent.classList.add('hidden');
 };
+
 const openContextDrawer = () => {
   adminMenu.style.display = 'none';
   orgInput.value      = tokenMap.organisation_name;
@@ -151,7 +155,10 @@ const openContextDrawer = () => {
   adminPopup.classList.add('open');
   drawerScrim.classList.add('show');
 };
+
 const openUpdatesDrawer = () => {
+  // reveal the content list when opening the drawer
+  updatesContent.classList.remove('hidden');
   updatesDrawer.classList.add('open');
   drawerScrim.classList.add('show');
 };
@@ -177,6 +184,7 @@ demoReset.addEventListener('click', () => {
   saveChangeLog(changeLog);
   changeLogContent.innerHTML = '<p>No changes yet.</p>';
   updatesContent.innerHTML = '<p>No updates for this document.</p>';
+  updatesContent.classList.add('hidden');
 });
 
 /** Save contextual settings */
