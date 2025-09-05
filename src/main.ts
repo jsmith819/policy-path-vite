@@ -1,3 +1,4 @@
+// src/main.ts
 import type { ChangeLogEntry, TokenMap } from './types';
 import { loadTokenMap, saveTokenMap, loadChangeLog, saveChangeLog } from './store';
 import { checkLogin } from './auth';
@@ -149,7 +150,7 @@ const closeAllDrawers = () => {
 const openContextDrawer = () => {
   adminMenu.style.display = 'none';
   orgInput.value      = tokenMap.organisation_name;
-  orgShortInput.value = (tokenMap as any).organisation_short || '';
+  (orgShortInput as HTMLInputElement).value = (tokenMap as any).organisation_short || '';
   personInput.value   = tokenMap.person;
   serviceInput.value  = tokenMap.service_type;
   adminPopup.classList.add('open');
@@ -298,6 +299,62 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
+/** Inline token editing inside #docContent */
+function enableInlineTokenEditing() {
+  const root = document.getElementById('docContent');
+  if (!root) return;
+
+  // Plaintext paste into tokens
+  root.addEventListener('paste', (e: any) => {
+    const t = (e.target as HTMLElement)?.closest('.token-edit');
+    if (!t) return;
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    document.execCommand('insertText', false, text);
+  });
+
+  // Sync edits to tokenMap, changelog, UI, and other spans
+  root.addEventListener('input', (e: any) => {
+    const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
+    if (!el) return;
+
+    const key  = el.dataset.key!;
+    const typed = (el.textContent || '').trim();
+    const oldVal = (tokenMap as any)[key] ?? '';
+
+    if (typed === oldVal) return;
+
+    // update data
+    (tokenMap as any)[key] = typed;
+    const now = new Date().toISOString();
+    tokenMap.updatedAt = now;
+    changeLog.push({
+      field: key as any,
+      oldValue: oldVal,
+      newValue: typed,
+      user: currentUsername || 'unknown',
+      timestamp: now
+    });
+
+    saveTokenMap(tokenMap);
+    saveChangeLog(changeLog);
+    updateLastUpdatedUI(tokenMap);
+
+    // sync all same-key tokens and suffixes
+    document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
+      if (span !== el) span.textContent = typed;
+      const suffix = span.nextElementSibling as HTMLElement | null;
+      if (suffix && suffix.classList.contains('token-suffix')) {
+        if (span.dataset.form === 'poss') {
+          suffix.textContent = /s$/i.test(typed) ? "'" : "'s";
+        } else if (span.dataset.form === 'plural') {
+          suffix.textContent = 's';
+        }
+      }
+    });
+  });
+}
+
 /** Search */
 searchBtn.addEventListener('click', () => {
   const q = searchInput.value.toLowerCase().trim();
@@ -320,4 +377,7 @@ searchBtn.addEventListener('click', () => {
 closeResultsBtn.addEventListener('click', () => { searchResults.classList.add('hidden'); });
 
 /** Boot */
-window.addEventListener('DOMContentLoaded', () => { indexDocuments(); });
+window.addEventListener('DOMContentLoaded', () => {
+  indexDocuments();
+  enableInlineTokenEditing();
+});

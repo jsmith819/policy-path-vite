@@ -13,6 +13,7 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
 // Helpers
 const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
 const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s");
+const esc = (s: string) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]!));
 
 // Canonicalise token keys and support aliases (case-insensitive)
 function canonicalKey(k: string): string {
@@ -56,7 +57,6 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   const upEl = document.getElementById('updatesContent');
   if (!upEl) return;
 
-  // Find all token keys referenced in the document
   const CURLY  = /\{\{\s*([\w_]+)\s*\}\}/gi;
   const SQUARE = /\[\s*([\w_]+)\s*(?:['’]s)?\s*\]/gi;
 
@@ -64,7 +64,6 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   for (const m of html.matchAll(CURLY))  tokens.add(canonicalKey(m[1] || ''));
   for (const m of html.matchAll(SQUARE)) tokens.add(canonicalKey(m[1] || ''));
 
-  // Filter relevant changelog entries and sort newest first
   const relevant = Array.isArray(changeLog)
     ? changeLog
         .filter(e => tokens.has(canonicalKey(e.field as string)))
@@ -73,7 +72,6 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
 
   if (!relevant.length) {
     upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
-    upEl.classList.remove('hidden');
     return;
   }
 
@@ -87,44 +85,53 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
       <li class="update-item">
         <div class="update-head"><strong>${ts}</strong> — ${who}</div>
         <div class="update-body">Changed <em>${field}</em><br>
-          <span class="delta"><span class="from">“${oldV}”</span> → <span class="to">“${newV}”</span></span>
+          <span class="delta"><span class="from">“${esc(oldV)}”</span> → <span class="to">“${esc(newV)}”</span></span>
         </div>
       </li>
     `;
   }).join('');
 
   upEl.innerHTML = `<ul class="updates-list">${items}</ul>`;
-  upEl.classList.remove('hidden'); // ensure visible inside the drawer
 }
 
-// Replacement with aliases, possessives, and simple “123/123s/123’s” mapping
+/** Replacement with inline editable spans + aliases + 123 shims */
 export function replaceTokens(html: string, tokenMap: TokenMap) {
-  const get = (key: string) => (tokenMap as any)[key];
+  const get = (key: string) => (tokenMap as any)[key] ?? '';
+  const span = (key: string, val: string, form: 'base'|'poss'|'plural'='base') => {
+    const v = esc(val || '');
+    if (form === 'poss') {
+      return `<span class="token-edit" data-key="${key}" data-form="poss" contenteditable="true">${v}</span><span class="token-suffix">'s</span>`;
+    }
+    if (form === 'plural') {
+      return `<span class="token-edit" data-key="${key}" data-form="plural" contenteditable="true">${v}</span><span class="token-suffix">s</span>`;
+    }
+    return `<span class="token-edit" data-key="${key}" contenteditable="true">${v}</span>`;
+  };
 
   let out = html;
 
-  // Handle 123 placeholders used in some docs
-  const p = String(get('person') || '');
-  out = out.replace(/\b123['’]s\b/g, possessive(p));
-  out = out.replace(/\b123s\b/g, p ? (p.endsWith('s') ? p : p + 's') : '123s');
-  out = out.replace(/\b123\b/g, p || '123');
+  // Legacy 123 shims -> editable person
+  const personVal = String(get('person'));
+  out = out.replace(/\b123['’]s\b/g, () => span('person', personVal, 'poss'));
+  out = out.replace(/\b123s\b/g,    () => span('person', personVal, 'plural'));
+  out = out.replace(/\b123\b/g,     () => span('person', personVal, 'base'));
 
-  // Possessive bracket tokens: [key's] or [key’s]
-  out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k: string) => {
-    const v = get(canonicalKey(k));
-    return v ? possessive(String(v)) : `[${k}'s]`;
+  // [key's] or [key’s] -> editable base + suffix
+  out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k) => {
+    const key = canonicalKey(k);
+    return span(key, String(get(key)), 'poss');
   });
 
-  // Non-possessive bracket tokens
-  out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
-    const v = get(canonicalKey(k));
-    return (v ?? `[${k}]`) as string;
+  // [key] -> editable
+  out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k) => {
+    const key = canonicalKey(k);
+    return span(key, String(get(key)), 'base');
   });
 
-  // Curly tokens
-  out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
-    const v = get(canonicalKey(k));
-    return (v ?? `{{${k}}}`) as string;
+  // {{ key }} -> editable
+  out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k) => {
+    const key = canonicalKey(k);
+    return span(key, String(get(key)), 'base');
   });
 
   return out;
@@ -143,13 +150,10 @@ export async function loadAndRender(
     const html = await fetchDocumentHtml(fileName);
     const tokenised = replaceTokens(html, tokenMap);
     if (docEl) docEl.innerHTML = tokenised;
-    buildUpdatesPanel(html, changeLog); // fill left drawer
+    buildUpdatesPanel(html, changeLog); // populate left drawer
   } catch (err: any) {
     if (docEl) docEl.innerHTML = `<p>Error loading document: ${String(err?.message || err)}</p>`;
     const upEl = document.getElementById('updatesContent');
-    if (upEl) {
-      upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
-      upEl.classList.remove('hidden');
-    }
+    if (upEl) upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
   }
 }
