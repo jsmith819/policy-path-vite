@@ -2,7 +2,6 @@
 import type { ChangeLogEntry, TokenMap } from './types';
 import { filenameFor, fetchDocumentHtml } from './api';
 
-/** Header “last updated” */
 export function updateLastUpdatedUI(tokenMap: TokenMap) {
   const el = document.getElementById('updateBox');
   if (!el) return;
@@ -11,25 +10,37 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
     : 'Last updated: Never';
 }
 
-/* ----------------- helpers ----------------- */
-
+// Helpers
 const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
 const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s");
 
 function canonicalKey(k: string): string {
   const kk = (k || '').toLowerCase().trim();
   if (kk === 'organisational' || kk === 'organizational') return 'organisation_name';
-  if (kk === 'organisation'   || kk === 'organization')   return 'organisation_name';
+  if (kk === 'organisation' || kk === 'organization') return 'organisation_name';
   if (kk === 'organisation_name' || kk === 'organization_name' || kk === 'org' || kk === 'org_name')
     return 'organisation_name';
-  if (kk === 'organisation_short' || kk === 'org_short')   return 'organisation_short';
+  if (kk === 'organisation_short' || kk === 'org_short') return 'organisation_short';
   if (kk === 'resident' || kk === 'resident_name' || kk === 'consumer') return 'person';
   if (kk === 'person' || kk === 'persons') return 'person';
   if (kk === 'service' || kk === 'service-type' || kk === 'service_type') return 'service_type';
   return kk;
 }
 
-/** clickable policy pills */
+function escHtml(s: string): string {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c]
+  );
+}
+
+function tokenSpan(key: string, value: string, savedKeys?: Set<string>): string {
+  const k = canonicalKey(key);
+  const savedCls = savedKeys && savedKeys.has(k) ? ' token-saved' : '';
+  return `<span class="token-edit${savedCls}" data-key="${k}" contenteditable="true" spellcheck="false">${escHtml(
+    value ?? ''
+  )}</span>`;
+}
+
 export function renderPolicies(
   _segmentName: string,
   policies: string[],
@@ -53,16 +64,16 @@ export function renderPolicies(
   });
 }
 
-/** LEFT drawer content (updates) */
+/** Build the Updates drawer content (left side). */
 export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   const upEl = document.getElementById('updatesContent');
   if (!upEl) return;
 
-  const CURLY  = /\{\{\s*([\w_]+)\s*\}\}/gi;
+  const CURLY = /\{\{\s*([\w_]+)\s*\}\}/gi;
   const SQUARE = /\[\s*([\w_]+)\s*(?:['’]s)?\s*\]/gi;
 
   const tokens = new Set<string>();
-  for (const m of html.matchAll(CURLY))  tokens.add(canonicalKey(m[1] || ''));
+  for (const m of html.matchAll(CURLY)) tokens.add(canonicalKey(m[1] || ''));
   for (const m of html.matchAll(SQUARE)) tokens.add(canonicalKey(m[1] || ''));
 
   const relevant = Array.isArray(changeLog)
@@ -76,75 +87,65 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
     return;
   }
 
-  const items = relevant.map(e => {
-    const ts = new Date(e.timestamp).toLocaleString();
-    const field = canonicalKey(String(e.field || ''));
-    const oldV = String(e.oldValue ?? '—');
-    const newV = String(e.newValue ?? '—');
-    const who  = String(e.user || 'unknown');
-    return `
+  const items = relevant
+    .map(e => {
+      const ts = new Date(e.timestamp).toLocaleString();
+      const field = canonicalKey(String(e.field || ''));
+      const oldV = escHtml(String(e.oldValue ?? '—'));
+      const newV = escHtml(String(e.newValue ?? '—'));
+      const who = escHtml(String(e.user || 'unknown'));
+      return `
       <li class="update-item">
         <div class="update-head"><strong>${ts}</strong> — ${who}</div>
-        <div class="update-body">
-          Changed <em>${field}</em><br>
+        <div class="update-body">Changed <em>${field}</em><br>
           <span class="delta"><span class="from">“${oldV}”</span> → <span class="to">“${newV}”</span></span>
         </div>
-      </li>
-    `;
-  }).join('');
+      </li>`;
+    })
+    .join('');
 
   upEl.innerHTML = `<ul class="updates-list">${items}</ul>`;
 }
 
-/* ---------- token replacement with inline editing ---------- */
-
-function wrapEditableToken(key: string, value: string) {
-  // contentEditable span with a little built‑in margin to avoid “glued” words
-  const safeVal = value || '';
-  const label = key.replace(/_/g, ' ');
-  return `<span class="token-edit"
-               contenteditable="true"
-               data-key="${key}"
-               role="textbox"
-               aria-label="${label}">${safeVal}</span>`;
-}
-
-export function replaceTokens(html: string, tokenMap: TokenMap) {
+/** Replace tokens with editable spans. Marks green for any token seen in changeLog (persist on reload). */
+export function replaceTokens(
+  html: string,
+  tokenMap: TokenMap,
+  savedKeys?: Set<string>
+) {
   const get = (key: string) => (tokenMap as any)[key];
-
   let out = html;
 
-  // 123 placeholders occasionally used for the person token
+  // 123 placeholders map to "person"
   const p = String(get('person') || '');
-  out = out.replace(/\b123['’]s\b/g, wrapEditableToken('person', possessive(p)));
-  out = out.replace(/\b123s\b/g, wrapEditableToken('person', p ? (p.endsWith('s') ? p : p + 's') : ''));
-  out = out.replace(/\b123\b/g, wrapEditableToken('person', p));
+  out = out.replace(/\b123['’]s\b/g, tokenSpan('person', possessive(p), savedKeys));
+  out = out.replace(/\b123s\b/g, tokenSpan('person', p ? (p.endsWith('s') ? p : p + 's') : '', savedKeys));
+  out = out.replace(/\b123\b/g, tokenSpan('person', p, savedKeys));
 
-  // [key's] / [key’s] (possessive)
+  // [key's] or [key’s]
   out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k: string) => {
-    const key = canonicalKey(k);
-    const v = (get(key) ?? '') as string;
-    return wrapEditableToken(key, possessive(String(v)));
+    const kk = canonicalKey(k);
+    const v = get(kk);
+    return tokenSpan(kk, v ? possessive(String(v)) : `[${k}'s]`, savedKeys);
   });
 
   // [key]
   out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
-    const key = canonicalKey(k);
-    const v = (get(key) ?? '') as string;
-    return wrapEditableToken(key, v);
+    const kk = canonicalKey(k);
+    const v = get(kk);
+    return tokenSpan(kk, (v ?? `[${k}]`) as string, savedKeys);
   });
 
   // {{ key }}
   out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
-    const key = canonicalKey(k);
-    const v = (get(key) ?? '') as string;
-    return wrapEditableToken(key, v);
+    const kk = canonicalKey(k);
+    const v = get(kk);
+    return tokenSpan(kk, (v ?? `{{${k}}}`) as string, savedKeys);
   });
 
   return out;
 }
 
-/** Load, tokenise, render */
 export async function loadAndRender(
   segment: string,
   policy: string,
@@ -156,15 +157,18 @@ export async function loadAndRender(
   try {
     const fileName = filenameFor(segment, policy);
     const html = await fetchDocumentHtml(fileName);
-    const tokenised = replaceTokens(html, tokenMap);
-    if (docEl) {
-      docEl.innerHTML = tokenised;
-      // All tokens start “unsaved” (red). main.ts toggles .token-saved to green on change.
-      docEl.querySelectorAll('.token-edit').forEach(el => el.classList.remove('token-saved'));
-    }
+
+    // Build set of tokens that have been edited at least once -> persist green on render
+    const savedKeys = new Set<string>(
+      (changeLog || []).map(e => canonicalKey(String(e.field || '')))
+    );
+
+    const tokenised = replaceTokens(html, tokenMap, savedKeys);
+    if (docEl) docEl.innerHTML = tokenised;
+
     buildUpdatesPanel(html, changeLog);
   } catch (err: any) {
-    if (docEl) docEl.innerHTML = `<p>Error loading document: ${String(err?.message || err)}</p>`;
+    if (docEl) docEl.innerHTML = `<p>Error loading document: ${escHtml(err?.message || String(err))}</p>`;
     const upEl = document.getElementById('updatesContent');
     if (upEl) upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
   }
