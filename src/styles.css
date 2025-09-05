@@ -1,7 +1,7 @@
 :root { --brand-green:#2d5133; --blue:#2196f3; --blue-dark:#1976d2; }
 * { box-sizing: border-box; }
 
-/* Page background: top → bottom, fade to white */
+/* Background */
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -45,7 +45,7 @@ body {
 .dropdown li { color:#333; padding:.75rem 1.25rem; cursor:pointer; }
 .dropdown li:hover { background:#43b049; color:#fff; }
 
-/* Search in top bar (compact) */
+/* Search */
 .search-container{ display:flex; align-items:center; gap:.5rem; margin:0; }
 .search-container input{
   width:100%; min-width:280px;
@@ -59,23 +59,23 @@ body {
 }
 .search-container button:hover{ background:var(--blue-dark); }
 
-/* Cards and results */
+/* Cards & results */
 .card { width:90%; max-width:800px; margin:20px auto; padding:15px; background:#fff; border-radius:8px; box-shadow:0 4px 10px rgba(0,0,0,.1); }
 .results-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem; }
 .icon-btn { background:none; border:none; font-size:1.25rem; line-height:1; cursor:pointer; padding:0; color:#666; }
 .icon-btn:hover { color:#000; }
 
-/* Wheel and policy list */
+/* Wheel */
 #circle-menu { width:500px; height:500px; margin:30px auto; }
 #policy-wheel { display:block; width:100%; height:100%; }
 #policy-wheel path.active, #policy-wheel circle.active { stroke:#fff; stroke-width:4; }
 
+/* Policy pills */
 #policies-list { text-align:center; margin-top:20px; }
 .policy-item { cursor:pointer; background:#1c2b4a; color:#fff; margin:5px; padding:8px 15px; border-radius:5px; display:inline-block; }
 
 /* Document header actions */
 .doc-header { display:flex; justify-content:space-between; align-items:center; gap:.75rem; }
-.update-tab { margin:0; }
 .update-tab button { background:var(--blue); color:#fff; border:none; padding:.5rem 1rem; border-radius:4px; cursor:pointer; transition:background .2s; }
 .update-tab button:hover { background:var(--blue-dark); }
 .context-btn{
@@ -84,30 +84,7 @@ body {
 }
 .context-btn:hover{ opacity:.9; }
 
-/* ---------- Token chips (inline editable) ---------- */
-.token-chip{
-  display:inline-block;
-  padding:0 .15em;                 /* inner breathing room */
-  margin:0 .15em;                  /* ensures visible gap from neighbours */
-  border-radius:4px;
-  background:rgba(220,53,69,.12);  /* red-ish until confirmed/updated */
-  box-shadow:inset 0 0 0 1px rgba(220,53,69,.35);
-  vertical-align:baseline;
-  line-height:1.2;
-  cursor:text;
-  transition:background .15s ease, box-shadow .15s ease;
-}
-.token-chip.updated{
-  background:rgba(25,135,84,.14);  /* green-ish after save */
-  box-shadow:inset 0 0 0 1px rgba(25,135,84,.40);
-}
-.token-chip:focus{
-  outline:none;
-  box-shadow:inset 0 0 0 2px var(--blue);
-  background:rgba(33,150,243,.12);
-}
-
-/* ---------- Drawers (left & right) ---------- */
+/* ---------- Drawers ---------- */
 .side-drawer{
   position:fixed; top:0; bottom:0;
   width:340px; max-width:90vw;
@@ -119,11 +96,6 @@ body {
 .side-drawer.right{ right:0; left:auto; transform: translateX(100%); }
 .side-drawer.left { left:0;  right:auto; transform: translateX(-100%); }
 .side-drawer.open { transform: translateX(0); }
-
-/* Give the left drawer stronger specificity just in case */
-.side-drawer.left.open  { transform: translateX(0); }
-.side-drawer.right.open { transform: translateX(0); }
-
 .side-drawer h3{ margin:0 0 .75rem; }
 .side-drawer label{ display:block; font-size:.9rem; margin:.75rem 0 .25rem; color:#333; }
 .side-drawer input{ width:100%; padding:.5rem .6rem; border:1px solid #ccc; border-radius:6px; }
@@ -136,7 +108,7 @@ body {
 }
 .scrim.show{ opacity:1; pointer-events:auto; }
 
-/* Utility scroll area */
+/* Scroll area */
 .scroll { max-height: calc(100vh - 80px); overflow-y: auto; }
 
 /* Wheel visuals */
@@ -158,6 +130,28 @@ body {
 }
 #policy-wheel .separator { stroke:#fff; stroke-width:6; stroke-linecap:round; }
 #policy-wheel .corner-tri { stroke-width:1; }
+
+/* ---------- Inline token editor ---------- */
+#docContent { line-height: 1.6; }
+
+.token-edit {
+  display: inline;
+  background: #fde8e8;            /* red-ish (unsaved) */
+  border-radius: 3px;
+  padding: 0 .15em;
+  margin-left: .12em;             /* prevent “glued” words to the left */
+  margin-right: .06em;            /* tiny breathing room before punctuation */
+  outline: 1px dashed rgba(185, 28, 28, .35);
+  cursor: text;
+}
+.token-edit:focus {
+  outline: 2px solid var(--blue);
+  background: #ffecec;
+}
+.token-edit.token-saved {
+  background: #e7f6e7;            /* green-ish (saved) */
+  outline-color: rgba(16,185,129,.45);
+}
 
 /* Responsive */
 @media (max-width: 800px){

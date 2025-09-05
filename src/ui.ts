@@ -2,6 +2,7 @@
 import type { ChangeLogEntry, TokenMap } from './types';
 import { filenameFor, fetchDocumentHtml } from './api';
 
+/** Header “last updated” */
 export function updateLastUpdatedUI(tokenMap: TokenMap) {
   const el = document.getElementById('updateBox');
   if (!el) return;
@@ -10,35 +11,25 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
     : 'Last updated: Never';
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Helpers
+/* ----------------- helpers ----------------- */
+
 const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
 const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s");
 
 function canonicalKey(k: string): string {
   const kk = (k || '').toLowerCase().trim();
   if (kk === 'organisational' || kk === 'organizational') return 'organisation_name';
-  if (kk === 'organisation' || kk === 'organization') return 'organisation_name';
-  if (['organisation_name', 'organization_name', 'org', 'org_name'].includes(kk)) return 'organisation_name';
-  if (kk === 'organisation_short' || kk === 'org_short') return 'organisation_short';
+  if (kk === 'organisation'   || kk === 'organization')   return 'organisation_name';
+  if (kk === 'organisation_name' || kk === 'organization_name' || kk === 'org' || kk === 'org_name')
+    return 'organisation_name';
+  if (kk === 'organisation_short' || kk === 'org_short')   return 'organisation_short';
   if (kk === 'resident' || kk === 'resident_name' || kk === 'consumer') return 'person';
   if (kk === 'person' || kk === 'persons') return 'person';
   if (kk === 'service' || kk === 'service-type' || kk === 'service_type') return 'service_type';
   return kk;
 }
 
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
-
-/** Render an editable token chip with safe spacing. */
-function renderChip(key: string, value: string | undefined) {
-  const v = value ?? '';
-  // editable chip; margins in CSS create visual spacing so it never touches neighbours
-  return `<span class="token-chip" data-token="${key}" contenteditable="true">${escapeHtml(v)}</span>`;
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Policies list
+/** clickable policy pills */
 export function renderPolicies(
   _segmentName: string,
   policies: string[],
@@ -62,8 +53,7 @@ export function renderPolicies(
   });
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-/** Build the Updates drawer content (left side). */
+/** LEFT drawer content (updates) */
 export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   const upEl = document.getElementById('updatesContent');
   if (!upEl) return;
@@ -83,7 +73,6 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
 
   if (!relevant.length) {
     upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
-    upEl.classList.remove('hidden');
     return;
   }
 
@@ -96,52 +85,66 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
     return `
       <li class="update-item">
         <div class="update-head"><strong>${ts}</strong> — ${who}</div>
-        <div class="update-body">Changed <em>${field}</em><br>
-          <span class="delta"><span class="from">“${escapeHtml(oldV)}”</span> → <span class="to">“${escapeHtml(newV)}”</span></span>
+        <div class="update-body">
+          Changed <em>${field}</em><br>
+          <span class="delta"><span class="from">“${oldV}”</span> → <span class="to">“${newV}”</span></span>
         </div>
       </li>
     `;
   }).join('');
 
   upEl.innerHTML = `<ul class="updates-list">${items}</ul>`;
-  upEl.classList.remove('hidden');
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Token replacement (with editable chips)
+/* ---------- token replacement with inline editing ---------- */
+
+function wrapEditableToken(key: string, value: string) {
+  // contentEditable span with a little built‑in margin to avoid “glued” words
+  const safeVal = value || '';
+  const label = key.replace(/_/g, ' ');
+  return `<span class="token-edit"
+               contenteditable="true"
+               data-key="${key}"
+               role="textbox"
+               aria-label="${label}">${safeVal}</span>`;
+}
+
 export function replaceTokens(html: string, tokenMap: TokenMap) {
   const get = (key: string) => (tokenMap as any)[key];
 
   let out = html;
 
-  // Handle "123" placeholders used in some docs
+  // 123 placeholders occasionally used for the person token
   const p = String(get('person') || '');
-  out = out.replace(/\b123['’]s\b/g, possessive(p));
-  out = out.replace(/\b123s\b/g, p ? (p.endsWith('s') ? p : p + 's') : '123s');
-  out = out.replace(/\b123\b/g, p || '123');
+  out = out.replace(/\b123['’]s\b/g, wrapEditableToken('person', possessive(p)));
+  out = out.replace(/\b123s\b/g, wrapEditableToken('person', p ? (p.endsWith('s') ? p : p + 's') : ''));
+  out = out.replace(/\b123\b/g, wrapEditableToken('person', p));
 
-  // Possessive bracket tokens: [key's] or [key’s] → direct possessive text (no chip)
+  // [key's] / [key’s] (possessive)
   out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k: string) => {
-    const v = get(canonicalKey(k));
-    return v ? possessive(String(v)) : `[${k}'s]`;
+    const key = canonicalKey(k);
+    const v = (get(key) ?? '') as string;
+    return wrapEditableToken(key, possessive(String(v)));
   });
 
-  // Bracket tokens → editable chips
+  // [key]
   out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
     const key = canonicalKey(k);
-    return renderChip(key, String(get(key) ?? ''));
+    const v = (get(key) ?? '') as string;
+    return wrapEditableToken(key, v);
   });
 
-  // Curly tokens → editable chips
+  // {{ key }}
   out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
     const key = canonicalKey(k);
-    return renderChip(key, String(get(key) ?? ''));
+    const v = (get(key) ?? '') as string;
+    return wrapEditableToken(key, v);
   });
 
   return out;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+/** Load, tokenise, render */
 export async function loadAndRender(
   segment: string,
   policy: string,
@@ -154,14 +157,15 @@ export async function loadAndRender(
     const fileName = filenameFor(segment, policy);
     const html = await fetchDocumentHtml(fileName);
     const tokenised = replaceTokens(html, tokenMap);
-    if (docEl) docEl.innerHTML = tokenised;
-    buildUpdatesPanel(html, changeLog); // fill left drawer
+    if (docEl) {
+      docEl.innerHTML = tokenised;
+      // All tokens start “unsaved” (red). main.ts toggles .token-saved to green on change.
+      docEl.querySelectorAll('.token-edit').forEach(el => el.classList.remove('token-saved'));
+    }
+    buildUpdatesPanel(html, changeLog);
   } catch (err: any) {
     if (docEl) docEl.innerHTML = `<p>Error loading document: ${String(err?.message || err)}</p>`;
     const upEl = document.getElementById('updatesContent');
-    if (upEl) {
-      upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
-      upEl.classList.remove('hidden');
-    }
+    if (upEl) upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
   }
 }
