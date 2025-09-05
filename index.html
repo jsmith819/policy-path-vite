@@ -36,6 +36,7 @@
           <div id="adminMenu" class="dropdown">
             <ul>
               <li class="admin-only" id="ctxSettings">Contextual Settings</li>
+              <li class="admin-only" id="manageDocs">Manage Documents</li>
               <li class="admin-only" id="viewTemplate">View Template</li>
               <li class="admin-only" id="viewUpdates">View Updates</li>
               <li id="trackChanges">Track Changes</li>
@@ -69,7 +70,7 @@
         <div class="doc-header">
           <div id="updateTab" class="update-tab">
             <!-- Opens LEFT drawer -->
-            <button id="updatesToggle"> ◂ Updates </button>
+            <button id="updatesToggle">◂ Updates</button>
           </div>
           <!-- Opens RIGHT drawer -->
           <button
@@ -91,7 +92,7 @@
         aria-labelledby="updatesDrawerTitle"
       >
         <h3 id="updatesDrawerTitle">Updates</h3>
-        <div id="updatesContent" class="scroll"></div>
+        <div id="updatesContent" class="scroll hidden"></div>
       </aside>
 
       <!-- RIGHT: Contextualisation drawer -->
@@ -132,6 +133,23 @@
         <h3 id="trackPopupTitle">Change Log</h3>
         <div id="changeLogContent" class="scroll"></div>
         <button id="closeTrack">Close</button>
+      </div>
+
+      <!-- Document Manager modal -->
+      <div
+        class="popup"
+        id="docManager"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="docManagerTitle"
+      >
+        <h3 id="docManagerTitle">Document Manager</h3>
+        <p class="muted">Check “Standalone” to exclude a document from global context updates.</p>
+        <div id="docManagerList" class="scroll"></div>
+        <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;">
+          <button id="docManagerClose" type="button">Close</button>
+          <button id="docManagerSave" type="button">Save</button>
+        </div>
       </div>
 
       <!-- Scrim for drawers/modal -->
