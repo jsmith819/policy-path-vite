@@ -120,15 +120,24 @@ body {
 .delta .from { color:#6b7280; text-decoration:line-through; margin-right:.35rem; }
 .delta .to   { color:#111827; font-weight:600; }
 
-/* Inline editable token styling */
+/* Inline editable token shading:
+   - red until updated
+   - turns green after update (when .token-saved is present) */
 .token-edit{
-  display:inline-block; min-width:1.2ch; padding:0 2px;
-  border-bottom:1px dashed rgba(0,0,0,.35);
-  outline:none; cursor:text;
+  display:inline-block;
+  padding:0 .2em;
+  border-radius:4px;
+  background: rgba(239,68,68,.18);          /* red shade by default */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+  transition: background-color .18s ease, box-shadow .18s ease;
+  outline:none;
+}
+.token-edit.token-saved{
+  background: rgba(16,185,129,.18);         /* green shade after save */
+  box-shadow: inset 0 0 0 1px rgba(16,185,129,.35);
 }
 .token-edit:focus{
-  background:rgba(33,150,243,.08);
-  border-bottom-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(33,150,243,.35), inset 0 0 0 1px rgba(0,0,0,.08);
 }
 .token-suffix{ user-select:none; }
 

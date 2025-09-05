@@ -12,10 +12,8 @@ let currentUsername: string | null = null;
 let tokenMap: TokenMap = loadTokenMap();
 let changeLog: ChangeLogEntry[] = loadChangeLog();
 
-// Expose for debugging
 (Object.assign(window as any, { tokenMap, changeLog }));
 
-/** Data */
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
     'Commitment Statement',
@@ -143,7 +141,6 @@ const closeAllDrawers = () => {
   adminPopup.classList.remove('open');
   updatesDrawer.classList.remove('open');
   drawerScrim.classList.remove('show');
-  // keep the list hidden until the drawer is reopened
   updatesContent.classList.add('hidden');
 };
 
@@ -158,7 +155,6 @@ const openContextDrawer = () => {
 };
 
 const openUpdatesDrawer = () => {
-  // reveal the content list when opening the drawer
   updatesContent.classList.remove('hidden');
   updatesDrawer.classList.add('open');
   drawerScrim.classList.add('show');
@@ -299,12 +295,11 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
-/** Inline token editing inside #docContent */
+/** Inline token editing -> turn shaded area green after save */
 function enableInlineTokenEditing() {
   const root = document.getElementById('docContent');
   if (!root) return;
 
-  // Plaintext paste into tokens
   root.addEventListener('paste', (e: any) => {
     const t = (e.target as HTMLElement)?.closest('.token-edit');
     if (!t) return;
@@ -313,18 +308,16 @@ function enableInlineTokenEditing() {
     document.execCommand('insertText', false, text);
   });
 
-  // Sync edits to tokenMap, changelog, UI, and other spans
   root.addEventListener('input', (e: any) => {
     const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
     if (!el) return;
 
-    const key  = el.dataset.key!;
+    const key   = el.dataset.key!;
     const typed = (el.textContent || '').trim();
     const oldVal = (tokenMap as any)[key] ?? '';
 
     if (typed === oldVal) return;
 
-    // update data
     (tokenMap as any)[key] = typed;
     const now = new Date().toISOString();
     tokenMap.updatedAt = now;
@@ -340,17 +333,10 @@ function enableInlineTokenEditing() {
     saveChangeLog(changeLog);
     updateLastUpdatedUI(tokenMap);
 
-    // sync all same-key tokens and suffixes
+    // mark all occurrences as saved (green)
     document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
       if (span !== el) span.textContent = typed;
-      const suffix = span.nextElementSibling as HTMLElement | null;
-      if (suffix && suffix.classList.contains('token-suffix')) {
-        if (span.dataset.form === 'poss') {
-          suffix.textContent = /s$/i.test(typed) ? "'" : "'s";
-        } else if (span.dataset.form === 'plural') {
-          suffix.textContent = 's';
-        }
-      }
+      span.classList.add('token-saved');
     });
   });
 }
