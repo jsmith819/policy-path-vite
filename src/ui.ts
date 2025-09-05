@@ -10,18 +10,16 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
     : 'Last updated: Never';
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
 const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s");
-const esc = (s: string) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]!));
 
-// Canonicalise token keys and support aliases (case-insensitive)
 function canonicalKey(k: string): string {
   const kk = (k || '').toLowerCase().trim();
   if (kk === 'organisational' || kk === 'organizational') return 'organisation_name';
   if (kk === 'organisation' || kk === 'organization') return 'organisation_name';
-  if (kk === 'organisation_name' || kk === 'organization_name' || kk === 'org' || kk === 'org_name')
-    return 'organisation_name';
+  if (['organisation_name', 'organization_name', 'org', 'org_name'].includes(kk)) return 'organisation_name';
   if (kk === 'organisation_short' || kk === 'org_short') return 'organisation_short';
   if (kk === 'resident' || kk === 'resident_name' || kk === 'consumer') return 'person';
   if (kk === 'person' || kk === 'persons') return 'person';
@@ -29,6 +27,18 @@ function canonicalKey(k: string): string {
   return kk;
 }
 
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
+
+/** Render an editable token chip with safe spacing. */
+function renderChip(key: string, value: string | undefined) {
+  const v = value ?? '';
+  // editable chip; margins in CSS create visual spacing so it never touches neighbours
+  return `<span class="token-chip" data-token="${key}" contenteditable="true">${escapeHtml(v)}</span>`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Policies list
 export function renderPolicies(
   _segmentName: string,
   policies: string[],
@@ -52,6 +62,7 @@ export function renderPolicies(
   });
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
 /** Build the Updates drawer content (left side). */
 export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   const upEl = document.getElementById('updatesContent');
@@ -72,6 +83,7 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
 
   if (!relevant.length) {
     upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
+    upEl.classList.remove('hidden');
     return;
   }
 
@@ -85,58 +97,51 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
       <li class="update-item">
         <div class="update-head"><strong>${ts}</strong> — ${who}</div>
         <div class="update-body">Changed <em>${field}</em><br>
-          <span class="delta"><span class="from">“${esc(oldV)}”</span> → <span class="to">“${esc(newV)}”</span></span>
+          <span class="delta"><span class="from">“${escapeHtml(oldV)}”</span> → <span class="to">“${escapeHtml(newV)}”</span></span>
         </div>
       </li>
     `;
   }).join('');
 
   upEl.innerHTML = `<ul class="updates-list">${items}</ul>`;
+  upEl.classList.remove('hidden');
 }
 
-/** Replacement with inline editable spans + aliases + 123 shims */
+// ──────────────────────────────────────────────────────────────────────────────
+// Token replacement (with editable chips)
 export function replaceTokens(html: string, tokenMap: TokenMap) {
-  const get = (key: string) => (tokenMap as any)[key] ?? '';
-  const span = (key: string, val: string, form: 'base'|'poss'|'plural'='base') => {
-    const v = esc(val || '');
-    if (form === 'poss') {
-      return `<span class="token-edit" data-key="${key}" data-form="poss" contenteditable="true">${v}</span><span class="token-suffix">'s</span>`;
-    }
-    if (form === 'plural') {
-      return `<span class="token-edit" data-key="${key}" data-form="plural" contenteditable="true">${v}</span><span class="token-suffix">s</span>`;
-    }
-    return `<span class="token-edit" data-key="${key}" contenteditable="true">${v}</span>`;
-  };
+  const get = (key: string) => (tokenMap as any)[key];
 
   let out = html;
 
-  // Legacy 123 shims -> editable person
-  const personVal = String(get('person'));
-  out = out.replace(/\b123['’]s\b/g, () => span('person', personVal, 'poss'));
-  out = out.replace(/\b123s\b/g,    () => span('person', personVal, 'plural'));
-  out = out.replace(/\b123\b/g,     () => span('person', personVal, 'base'));
+  // Handle "123" placeholders used in some docs
+  const p = String(get('person') || '');
+  out = out.replace(/\b123['’]s\b/g, possessive(p));
+  out = out.replace(/\b123s\b/g, p ? (p.endsWith('s') ? p : p + 's') : '123s');
+  out = out.replace(/\b123\b/g, p || '123');
 
-  // [key's] or [key’s] -> editable base + suffix
-  out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k) => {
-    const key = canonicalKey(k);
-    return span(key, String(get(key)), 'poss');
+  // Possessive bracket tokens: [key's] or [key’s] → direct possessive text (no chip)
+  out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k: string) => {
+    const v = get(canonicalKey(k));
+    return v ? possessive(String(v)) : `[${k}'s]`;
   });
 
-  // [key] -> editable
-  out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k) => {
+  // Bracket tokens → editable chips
+  out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
     const key = canonicalKey(k);
-    return span(key, String(get(key)), 'base');
+    return renderChip(key, String(get(key) ?? ''));
   });
 
-  // {{ key }} -> editable
-  out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k) => {
+  // Curly tokens → editable chips
+  out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
     const key = canonicalKey(k);
-    return span(key, String(get(key)), 'base');
+    return renderChip(key, String(get(key) ?? ''));
   });
 
   return out;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
 export async function loadAndRender(
   segment: string,
   policy: string,
@@ -150,10 +155,13 @@ export async function loadAndRender(
     const html = await fetchDocumentHtml(fileName);
     const tokenised = replaceTokens(html, tokenMap);
     if (docEl) docEl.innerHTML = tokenised;
-    buildUpdatesPanel(html, changeLog); // populate left drawer
+    buildUpdatesPanel(html, changeLog); // fill left drawer
   } catch (err: any) {
     if (docEl) docEl.innerHTML = `<p>Error loading document: ${String(err?.message || err)}</p>`;
     const upEl = document.getElementById('updatesContent');
-    if (upEl) upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
+    if (upEl) {
+      upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
+      upEl.classList.remove('hidden');
+    }
   }
 }

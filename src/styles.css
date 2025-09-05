@@ -13,7 +13,6 @@ body {
 
 .hidden { display: none !important; }
 .error { color: red; }
-.muted { color:#6b7280; }
 
 /* Auth */
 .login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
@@ -85,6 +84,29 @@ body {
 }
 .context-btn:hover{ opacity:.9; }
 
+/* ---------- Token chips (inline editable) ---------- */
+.token-chip{
+  display:inline-block;
+  padding:0 .15em;                 /* inner breathing room */
+  margin:0 .15em;                  /* ensures visible gap from neighbours */
+  border-radius:4px;
+  background:rgba(220,53,69,.12);  /* red-ish until confirmed/updated */
+  box-shadow:inset 0 0 0 1px rgba(220,53,69,.35);
+  vertical-align:baseline;
+  line-height:1.2;
+  cursor:text;
+  transition:background .15s ease, box-shadow .15s ease;
+}
+.token-chip.updated{
+  background:rgba(25,135,84,.14);  /* green-ish after save */
+  box-shadow:inset 0 0 0 1px rgba(25,135,84,.40);
+}
+.token-chip:focus{
+  outline:none;
+  box-shadow:inset 0 0 0 2px var(--blue);
+  background:rgba(33,150,243,.12);
+}
+
 /* ---------- Drawers (left & right) ---------- */
 .side-drawer{
   position:fixed; top:0; bottom:0;
@@ -97,6 +119,11 @@ body {
 .side-drawer.right{ right:0; left:auto; transform: translateX(100%); }
 .side-drawer.left { left:0;  right:auto; transform: translateX(-100%); }
 .side-drawer.open { transform: translateX(0); }
+
+/* Give the left drawer stronger specificity just in case */
+.side-drawer.left.open  { transform: translateX(0); }
+.side-drawer.right.open { transform: translateX(0); }
+
 .side-drawer h3{ margin:0 0 .75rem; }
 .side-drawer label{ display:block; font-size:.9rem; margin:.75rem 0 .25rem; color:#333; }
 .side-drawer input{ width:100%; padding:.5rem .6rem; border:1px solid #ccc; border-radius:6px; }
@@ -111,35 +138,6 @@ body {
 
 /* Utility scroll area */
 .scroll { max-height: calc(100vh - 80px); overflow-y: auto; }
-
-/* Updates list styling (left drawer) */
-.updates-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
-.update-item { padding:.5rem .6rem; border:1px solid #e5e7eb; border-radius:6px; background:#fafafa; }
-.update-head { font-size:.9rem; color:#374151; margin-bottom:.25rem; }
-.update-body { font-size:.9rem; color:#111827; }
-.delta .from { color:#6b7280; text-decoration:line-through; margin-right:.35rem; }
-.delta .to   { color:#111827; font-weight:600; }
-
-/* Inline editable token shading:
-   - red until updated
-   - turns green after update (when .token-saved is present) */
-.token-edit{
-  display:inline-block;
-  padding:0 .2em;
-  border-radius:4px;
-  background: rgba(239,68,68,.18);          /* red shade by default */
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
-  transition: background-color .18s ease, box-shadow .18s ease;
-  outline:none;
-}
-.token-edit.token-saved{
-  background: rgba(16,185,129,.18);         /* green shade after save */
-  box-shadow: inset 0 0 0 1px rgba(16,185,129,.35);
-}
-.token-edit:focus{
-  box-shadow: 0 0 0 2px rgba(33,150,243,.35), inset 0 0 0 1px rgba(0,0,0,.08);
-}
-.token-suffix{ user-select:none; }
 
 /* Wheel visuals */
 #policy-wheel .seg { transition: filter .18s ease, stroke-width .18s ease, transform .18s ease; }
@@ -166,5 +164,4 @@ body {
   .top-bar { grid-template-columns: 1fr; gap:.75rem; }
   .top-right { justify-self:start; }
   .search-container input { min-width:0; }
-  .side-drawer { width:86vw; }
 }
