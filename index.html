@@ -33,10 +33,15 @@
         <div class="top-right">
           <div id="updateBox">Last updated: Never</div>
           <button id="adminBtn" aria-label="Admin">⚙️</button>
+
+          <!-- Primary admin dropdown -->
           <div id="adminMenu" class="dropdown">
             <ul>
               <li class="admin-only" id="ctxSettings">Contextual Settings</li>
-              <li class="admin-only" id="manageDocs">Manage Documents</li>
+
+              <!-- NEW: parent item that opens the nested drop-down -->
+              <li class="admin-only has-sub" id="manageDocs">Manage Documents ▸</li>
+
               <li class="admin-only" id="viewTemplate">View Template</li>
               <li class="admin-only" id="viewUpdates">View Updates</li>
               <li id="trackChanges">Track Changes</li>
@@ -44,6 +49,17 @@
               <li class="admin-only" id="toggleSearchBar">Toggle Search Bar</li>
               <li id="logout">Logout</li>
             </ul>
+
+            <!-- NEW: nested drop-down for Document Manager -->
+            <div id="docMgrMenu" class="submenu" role="menu" aria-labelledby="manageDocs">
+              <div class="submenu-head">
+                <strong>Document Manager</strong>
+                <button id="docMgrClose" class="icon-btn" aria-label="Close">×</button>
+              </div>
+              <div id="docMgrList" class="submenu-body scroll">
+                <!-- built in main.ts -->
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -70,7 +86,7 @@
         <div class="doc-header">
           <div id="updateTab" class="update-tab">
             <!-- Opens LEFT drawer -->
-            <button id="updatesToggle">◂ Updates</button>
+            <button id="updatesToggle">Updates ◂</button>
           </div>
           <!-- Opens RIGHT drawer -->
           <button
@@ -92,7 +108,7 @@
         aria-labelledby="updatesDrawerTitle"
       >
         <h3 id="updatesDrawerTitle">Updates</h3>
-        <div id="updatesContent" class="scroll hidden"></div>
+        <div id="updatesContent" class="scroll"></div>
       </aside>
 
       <!-- RIGHT: Contextualisation drawer -->
@@ -133,23 +149,6 @@
         <h3 id="trackPopupTitle">Change Log</h3>
         <div id="changeLogContent" class="scroll"></div>
         <button id="closeTrack">Close</button>
-      </div>
-
-      <!-- Document Manager modal -->
-      <div
-        class="popup"
-        id="docManager"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="docManagerTitle"
-      >
-        <h3 id="docManagerTitle">Document Manager</h3>
-        <p class="muted">Check “Standalone” to exclude a document from global context updates.</p>
-        <div id="docManagerList" class="scroll"></div>
-        <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;">
-          <button id="docManagerClose" type="button">Close</button>
-          <button id="docManagerSave" type="button">Save</button>
-        </div>
       </div>
 
       <!-- Scrim for drawers/modal -->

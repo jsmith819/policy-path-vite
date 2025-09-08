@@ -5,7 +5,11 @@ import { checkLogin } from './auth';
 import { drawWheel } from './wheel';
 import { loadAndRender, renderPolicies, updateLastUpdatedUI } from './ui';
 import { indexDocuments, search as searchDocs } from './search';
-import { filenameFor } from './api';
+
+/* ----------------- Globals & helpers ----------------- */
+
+type TokenKey = keyof TokenMap;
+type DocKey = string;
 
 let currentUserRole: 'admin' | 'user' | null = null;
 let currentUsername: string | null = null;
@@ -15,7 +19,39 @@ let changeLog: ChangeLogEntry[] = loadChangeLog();
 
 (Object.assign(window as any, { tokenMap, changeLog }));
 
-/** Data */
+const STANDALONE_KEY = 'pp_standalone_docs';
+const OVERRIDES_KEY  = 'pp_doc_overrides';
+
+type DocOverrides = Record<DocKey, Partial<TokenMap>>;
+
+const loadStandalone = (): Set<DocKey> => {
+  try { return new Set(JSON.parse(localStorage.getItem(STANDALONE_KEY) || '[]')); }
+  catch { return new Set(); }
+};
+const saveStandalone = (s: Set<DocKey>) => {
+  localStorage.setItem(STANDALONE_KEY, JSON.stringify([...s]));
+};
+const loadOverrides = (): DocOverrides => {
+  try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') as DocOverrides; }
+  catch { return {}; }
+};
+const saveOverrides = () => {
+  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(docOverrides));
+};
+
+let standaloneDocs = loadStandalone();
+let docOverrides: DocOverrides = loadOverrides();
+
+let currentSegment: string | null = null;
+let currentPolicy : string | null = null;
+let currentDocKey : DocKey | null = null;
+
+const keyFor = (segment: string, policy: string): DocKey => `${segment}::${policy}`;
+const getEffectiveMap = (docKey: DocKey | null): TokenMap =>
+  ({ ...(tokenMap || {}), ...(docKey ? (docOverrides[docKey] || {}) : {}) } as TokenMap);
+
+/* ----------------- Data (policy catalog) ----------------- */
+
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
     'Commitment Statement',
@@ -54,36 +90,8 @@ const policyColors: Record<string, string> = {
   'Residential community': '#faa916'
 };
 
-/** Doc config (grouped vs standalone + per-doc overrides) */
-type DocConfig = {
-  standalone: Record<string, boolean>;
-  overrides: Record<string, Partial<TokenMap>>;
-};
-const DOC_CFG_KEY = 'docConfig';
-const loadDocConfig = (): DocConfig => {
-  try {
-    const raw = localStorage.getItem(DOC_CFG_KEY);
-    if (!raw) return { standalone: {}, overrides: {} };
-    const p = JSON.parse(raw);
-    return { standalone: p.standalone || {}, overrides: p.overrides || {} };
-  } catch { return { standalone: {}, overrides: {} }; }
-};
-const saveDocConfig = (cfg: DocConfig) => localStorage.setItem(DOC_CFG_KEY, JSON.stringify(cfg));
-let docCfg: DocConfig = loadDocConfig();
+/* ----------------- DOM ----------------- */
 
-/** Current doc context */
-let currentSegment: string | null = null;
-let currentPolicy: string | null = null;
-let currentDocKey: string | null = null;
-const isStandalone = (key: string | null) => !!(key && docCfg.standalone[key]);
-const effectiveTokensFor = (key: string | null): TokenMap => {
-  if (!key) return tokenMap;
-  if (!docCfg.standalone[key]) return tokenMap;
-  const ov = docCfg.overrides[key] || {};
-  return { ...tokenMap, ...ov } as TokenMap;
-};
-
-/** DOM */
 const loginScreenEl = document.getElementById('loginScreen')!;
 const mainAppEl     = document.getElementById('mainApp')!;
 const userField     = document.getElementById('username') as HTMLInputElement;
@@ -96,13 +104,17 @@ const togglePw      = document.getElementById('togglePw')!;
 const adminBtn      = document.getElementById('adminBtn')!;
 const adminMenu     = document.getElementById('adminMenu')!;
 const ctxSettings   = document.getElementById('ctxSettings')!;
-const manageDocs    = document.getElementById('manageDocs')!;
 const viewTemplate  = document.getElementById('viewTemplate')!;
 const viewUpdates   = document.getElementById('viewUpdates')!;
 const trackChanges  = document.getElementById('trackChanges')!;
 const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
+
+const manageDocsBtn = document.getElementById('manageDocs')!;
+const docMgrMenu    = document.getElementById('docMgrMenu')!;
+const docMgrClose   = document.getElementById('docMgrClose')!;
+const docMgrList    = document.getElementById('docMgrList')!;
 
 const searchContainer = document.getElementById('searchContainer')!;
 const searchInput   = document.getElementById('semanticSearch') as HTMLInputElement;
@@ -126,19 +138,15 @@ const saveTokensBtn = document.getElementById('saveTokensBtn')!;
 
 const updateTabBtn  = document.getElementById('updatesToggle')!;
 const updatesContent= document.getElementById('updatesContent')!;
-const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
 
-/* Doc Manager modal */
-const docManager      = document.getElementById('docManager')!;
-const docManagerList  = document.getElementById('docManagerList')!;
-const docManagerSave  = document.getElementById('docManagerSave')!;
-const docManagerClose = document.getElementById('docManagerClose')!;
+const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
 
 const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
 const closeTrackBtn = document.getElementById('closeTrack')!;
 
-/** Permissions */
+/* ----------------- Permissions & UI bits ----------------- */
+
 function applyPermissions() {
   document.querySelectorAll('#adminMenu li.admin-only').forEach(li => {
     (li as HTMLElement).style.display = (currentUserRole === 'admin') ? 'block' : 'none';
@@ -146,7 +154,8 @@ function applyPermissions() {
 }
 function updateLastUpdated() { updateLastUpdatedUI(tokenMap); }
 
-/** Auth */
+/* ----------------- Auth ----------------- */
+
 loginBtn.addEventListener('click', () => {
   const res = checkLogin(userField.value, passField.value);
   if (res.ok) {
@@ -173,7 +182,8 @@ logoutBtn.addEventListener('click', () => {
   currentUsername = null;
 });
 
-/** Drawers */
+/* ----------------- Drawers ----------------- */
+
 const closeAllDrawers = () => {
   adminPopup.classList.remove('open');
   updatesDrawer.classList.remove('open');
@@ -198,16 +208,19 @@ const openUpdatesDrawer = () => {
 };
 
 adminBtn.addEventListener('click', () => {
-  adminMenu.style.display = (adminMenu.style.display === 'block') ? 'none' : 'block';
+  const show = adminMenu.style.display !== 'block';
+  adminMenu.style.display = show ? 'block' : 'none';
+  if (!show) hideDocMgr();
 });
 ctxSettings.addEventListener('click', openContextDrawer);
 openContextBtn.addEventListener('click', openContextDrawer);
 updateTabBtn.addEventListener('click', openUpdatesDrawer);
 
 drawerScrim.addEventListener('click', closeAllDrawers);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllDrawers(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; } });
 
-/** Admin menu items */
+/* ----------------- Admin menu items ----------------- */
+
 viewTemplate.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Template coming soon.'); });
 viewUpdates.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Updates coming soon.'); });
 
@@ -221,7 +234,13 @@ demoReset.addEventListener('click', () => {
   updatesContent.classList.add('hidden');
 });
 
-/** Save contextual settings (global) */
+toggleSearchBar.addEventListener('click', () => {
+  searchContainer.classList.toggle('hidden');
+  adminMenu.style.display = 'none';
+});
+
+/* ----------------- Save contextual settings ----------------- */
+
 saveTokensBtn.addEventListener('click', () => {
   const oldMap = { ...tokenMap };
 
@@ -233,8 +252,8 @@ saveTokensBtn.addEventListener('click', () => {
   const now = new Date().toISOString();
   tokenMap.updatedAt = now;
 
-  (['organisation_name','organisation_short','person','service_type'] as const)
-    .forEach((field: any) => {
+  (['organisation_name','organisation_short','person','service_type'] as TokenKey[])
+    .forEach((field) => {
       if ((tokenMap as any)[field] !== (oldMap as any)[field]) {
         const entry: ChangeLogEntry = {
           field,
@@ -252,15 +271,10 @@ saveTokensBtn.addEventListener('click', () => {
 
   updateLastUpdated();
   closeAllDrawers();
-
-  // Refresh current doc to reflect new globals (unless standalone overrides shadow them)
-  if (currentSegment && currentPolicy) {
-    const eff = effectiveTokensFor(currentDocKey);
-    loadAndRender(currentSegment, currentPolicy, eff, changeLog);
-  }
 });
 
-/** Change log modal */
+/* ----------------- Change log modal ----------------- */
+
 trackChanges.addEventListener('click', () => {
   adminMenu.style.display = 'none';
   if (!changeLog.length) changeLogContent.innerHTML = '<p>No changes yet.</p>';
@@ -272,7 +286,8 @@ trackChanges.addEventListener('click', () => {
 });
 closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).style.display = 'none'; });
 
-/** Wheel + navigation */
+/* ----------------- Wheel + navigation ----------------- */
+
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
 
@@ -314,45 +329,49 @@ function selectSegment(segmentOrKey: string, evt: Event) {
         if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
         return;
       }
-      // load first-class click
-      openDoc(segmentName, policy);
+      // record current doc
+      currentSegment = segmentName;
+      currentPolicy  = policy;
+      currentDocKey  = keyFor(segmentName, policy);
+
+      // render with effective (global + per-doc) map
+      const eff = getEffectiveMap(currentDocKey);
+      loadAndRender(segmentName, policy, eff, changeLog);
     },
     color
   );
 
-  // Choose initial policy
   let initial = policies[0];
   if (policyId) {
     const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
     if (m) initial = m;
   }
 
-  if (!initial || /^2\.\d+\s+Placeholder$/i.test(initial)) {
-    const docEl = document.getElementById('docContent');
+  const docEl = document.getElementById('docContent');
+  const isPlaceholder = initial ? /^2\.\d+\s+Placeholder$/i.test(initial) : false;
+  if (!initial || isPlaceholder) {
     if (docEl) docEl.textContent = 'Select a policy';
     return;
   }
 
-  openDoc(segmentName, initial);
-}
-
-function openDoc(segment: string, policy: string) {
-  currentSegment = segment;
-  currentPolicy  = policy;
-  currentDocKey  = filenameFor(segment, policy);
-  const docEl = document.getElementById('docContent');
+  // set & render first item too (when opening via wedge click, no pill click yet)
+  currentSegment = segmentName;
+  currentPolicy  = initial;
+  currentDocKey  = keyFor(segmentName, initial);
+  const eff = getEffectiveMap(currentDocKey);
   if (docEl) docEl.textContent = 'Loading…';
-  const eff = effectiveTokensFor(currentDocKey);
-  loadAndRender(segment, policy, eff, changeLog);
+  loadAndRender(segmentName, initial, eff, changeLog);
 }
 
 drawWheel(svgWheel, selectSegment);
 
-/** Inline token editing -> route to global or doc override; turn green after save */
+/* ----------------- Inline token editing ----------------- */
+
 function enableInlineTokenEditing() {
   const root = document.getElementById('docContent');
   if (!root) return;
 
+  // plain-text paste only
   root.addEventListener('paste', (e: any) => {
     const t = (e.target as HTMLElement)?.closest('.token-edit');
     if (!t) return;
@@ -363,114 +382,140 @@ function enableInlineTokenEditing() {
 
   root.addEventListener('input', (e: any) => {
     const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
-    if (!el) return;
+    if (!el || !currentDocKey) return;
 
-    const key   = el.dataset.key!;
+    const key   = el.dataset.key as TokenKey;
     const typed = (el.textContent || '').trim();
 
-    // Decide target: doc override if standalone, else global
-    const keyDoc = currentDocKey || '';
-    if (isStandalone(keyDoc)) {
-      const oldVal = (docCfg.overrides[keyDoc]?.[key] ?? (tokenMap as any)[key] ?? '') as string;
-      // write override
-      const ov = docCfg.overrides[keyDoc] || {};
-      (ov as any)[key] = typed;
-      docCfg.overrides[keyDoc] = ov;
-      saveDocConfig(docCfg);
+    // Decide where to save: per-doc if standalone, else global
+    if (standaloneDocs.has(currentDocKey)) {
+      const ov = (docOverrides[currentDocKey] ||= {});
+      const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
+      ov[key] = typed as any;
+      saveOverrides();
 
-      // log
-      const now = new Date().toISOString();
-      changeLog.push({
-        field: key as any,
-        oldValue: String(oldVal),
-        newValue: typed,
-        user: currentUsername || 'unknown',
-        timestamp: now
-      });
-      saveChangeLog(changeLog);
-      tokenMap.updatedAt = now;
-      updateLastUpdatedUI(tokenMap);
+      pushChangeLog(key, before, typed);
     } else {
-      const oldVal = (tokenMap as any)[key] ?? '';
-      if (typed !== oldVal) {
-        (tokenMap as any)[key] = typed;
-        const now = new Date().toISOString();
-        tokenMap.updatedAt = now;
-        changeLog.push({
-          field: key as any,
-          oldValue: String(oldVal),
-          newValue: typed,
-          user: currentUsername || 'unknown',
-          timestamp: now
-        });
-        saveTokenMap(tokenMap);
-        saveChangeLog(changeLog);
-        updateLastUpdatedUI(tokenMap);
-      }
+      const before = String((tokenMap[key] ?? '') as any);
+      (tokenMap as any)[key] = typed;
+      tokenMap.updatedAt = new Date().toISOString();
+      saveTokenMap(tokenMap);
+
+      pushChangeLog(key, before, typed);
     }
+
+    updateLastUpdatedUI(tokenMap);
 
     // mark all occurrences as saved (green)
     document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
       if (span !== el) span.textContent = typed;
       span.classList.add('token-saved');
-      span.classList.remove('token-pending');
     });
   });
 }
 
-/** Document Manager */
-manageDocs.addEventListener('click', () => {
-  adminMenu.style.display = 'none';
-  renderDocManager();
-  (docManager as HTMLElement).style.display = 'block';
-  drawerScrim.classList.add('show');
-});
-docManagerClose.addEventListener('click', () => {
-  (docManager as HTMLElement).style.display = 'none';
-  drawerScrim.classList.remove('show');
-});
-docManagerSave.addEventListener('click', () => {
-  const rows = docManagerList.querySelectorAll<HTMLInputElement>('input.dm-standalone');
-  const next: DocConfig = { standalone: {}, overrides: { ...docCfg.overrides } };
-  rows.forEach(cb => { next.standalone[cb.dataset.dockey!] = cb.checked; });
-  docCfg = next;
-  saveDocConfig(docCfg);
-  (docManager as HTMLElement).style.display = 'none';
-  drawerScrim.classList.remove('show');
+function pushChangeLog(field: TokenKey, oldValue: string, newValue: string) {
+  const entry: ChangeLogEntry = {
+    field,
+    oldValue,
+    newValue,
+    user: currentUsername || 'unknown',
+    timestamp: new Date().toISOString()
+  };
+  changeLog.push(entry);
+  saveChangeLog(changeLog);
+}
 
-  // If current doc changed mode, refresh with effective tokens
-  if (currentSegment && currentPolicy) {
-    const eff = effectiveTokensFor(currentDocKey);
-    loadAndRender(currentSegment, currentPolicy, eff, changeLog);
+/* ----------------- Document Manager (nested drop-down) ----------------- */
+
+function buildDocMgrMenu() {
+  if (!docMgrList) return;
+  docMgrList.innerHTML = '';
+
+  for (const segment of Object.keys(policiesData)) {
+    const section = document.createElement('div');
+    section.className = 'dm-section';
+
+    const segTitle = document.createElement('div');
+    segTitle.className = 'dm-seg';
+    segTitle.textContent = segment;
+    section.appendChild(segTitle);
+
+    for (const policy of policiesData[segment]) {
+      const docKey = keyFor(segment, policy);
+      const row = document.createElement('label');
+      row.className = 'dm-row';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = standaloneDocs.has(docKey);
+      cb.dataset.doc = docKey;
+
+      const title = document.createElement('span');
+      title.className = 'dm-title';
+      title.textContent = policy;
+
+      const tag = document.createElement('span');
+      tag.className = 'dm-tag';
+      tag.textContent = cb.checked ? 'Standalone' : 'Grouped';
+
+      cb.addEventListener('change', () => {
+        const checked = cb.checked;
+        if (checked) {
+          standaloneDocs.add(docKey);
+          docOverrides[docKey] ||= {};
+        } else {
+          standaloneDocs.delete(docKey);
+          delete docOverrides[docKey];
+        }
+        tag.textContent = checked ? 'Standalone' : 'Grouped';
+        saveStandalone(standaloneDocs);
+        saveOverrides();
+
+        // if the current doc was toggled, re-render with new effective map
+        if (currentDocKey === docKey && currentSegment && currentPolicy) {
+          const eff = getEffectiveMap(currentDocKey);
+          loadAndRender(currentSegment, currentPolicy, eff, changeLog);
+        }
+      });
+
+      row.appendChild(cb);
+      row.appendChild(title);
+      row.appendChild(tag);
+      section.appendChild(row);
+    }
+
+    docMgrList.appendChild(section);
   }
-});
-
-function renderDocManager() {
-  const items: string[] = [];
-  Object.keys(policiesData).forEach(segment => {
-    policiesData[segment].forEach(policy => {
-      // Skip placeholders
-      if (/^2\.\d+\s+Placeholder$/i.test(policy)) return;
-      const key = filenameFor(segment, policy);
-      const checked = !!docCfg.standalone[key];
-      items.push(`
-        <div class="doc-row" style="padding:.5rem 0; border-bottom:1px solid #eee;">
-          <div style="font-weight:600;">${segment}</div>
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <div>${policy}</div>
-            <label style="white-space:nowrap;">
-              <input type="checkbox" class="dm-standalone" data-dockey="${key}" ${checked ? 'checked' : ''} />
-              Standalone
-            </label>
-          </div>
-        </div>
-      `);
-    });
-  });
-  docManagerList.innerHTML = items.join('') || '<p>No documents found.</p>';
 }
 
-/** Search */
+function showDocMgr() {
+  // align submenu vertically with its parent item
+  const top = (manageDocsBtn as HTMLElement).offsetTop;
+  (docMgrMenu as HTMLElement).style.top = `${top}px`;
+  buildDocMgrMenu();
+  docMgrMenu.classList.add('show');
+}
+function hideDocMgr() {
+  docMgrMenu.classList.remove('show');
+}
+
+manageDocsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = !docMgrMenu.classList.contains('show');
+  // keep primary dropdown open while toggling submenu
+  if (open) showDocMgr(); else hideDocMgr();
+});
+docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
+
+// Close submenu when clicking elsewhere
+document.addEventListener('click', (e) => {
+  const inside = (e.target as Node) && (adminMenu.contains(e.target as Node) || docMgrMenu.contains(e.target as Node));
+  if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
+});
+
+/* ----------------- Search ----------------- */
+
 searchBtn.addEventListener('click', () => {
   const q = searchInput.value.toLowerCase().trim();
   const matches = searchDocs(q);
@@ -483,7 +528,13 @@ searchBtn.addEventListener('click', () => {
       div.style.padding = '10px 0';
       div.innerHTML = `<strong>${doc.title}</strong><br><button style="margin-top:5px;">View Document</button>`;
       const btn = div.querySelector('button')!;
-      btn.addEventListener('click', () => { openDoc(doc.segment, doc.policy); });
+      btn.addEventListener('click', () => {
+        currentSegment = doc.segment;
+        currentPolicy  = doc.policy;
+        currentDocKey  = keyFor(doc.segment, doc.policy);
+        const eff = getEffectiveMap(currentDocKey);
+        loadAndRender(doc.segment, doc.policy, eff, changeLog);
+      });
       resultsContent.appendChild(div);
     }
   }
@@ -491,7 +542,8 @@ searchBtn.addEventListener('click', () => {
 });
 closeResultsBtn.addEventListener('click', () => { searchResults.classList.add('hidden'); });
 
-/** Boot */
+/* ----------------- Boot ----------------- */
+
 window.addEventListener('DOMContentLoaded', () => {
   indexDocuments();
   enableInlineTokenEditing();
