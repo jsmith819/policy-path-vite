@@ -39,8 +39,8 @@
             <ul>
               <li class="admin-only" id="ctxSettings">Contextual Settings</li>
 
-              <!-- NEW: parent item that opens the nested drop-down -->
-              <li class="admin-only has-sub" id="manageDocs">Manage Documents ▸</li>
+              <!-- NEW: Manage Documents (opens nested submenu) -->
+              <li class="admin-only" id="manageDocs">Manage Documents ▸</li>
 
               <li class="admin-only" id="viewTemplate">View Template</li>
               <li class="admin-only" id="viewUpdates">View Updates</li>
@@ -50,15 +50,13 @@
               <li id="logout">Logout</li>
             </ul>
 
-            <!-- NEW: nested drop-down for Document Manager -->
-            <div id="docMgrMenu" class="submenu" role="menu" aria-labelledby="manageDocs">
-              <div class="submenu-head">
+            <!-- NEW: nested submenu for Document Manager -->
+            <div id="docMgrMenu" class="dropdown dropdown-sub">
+              <div class="docmgr-head">
                 <strong>Document Manager</strong>
                 <button id="docMgrClose" class="icon-btn" aria-label="Close">×</button>
               </div>
-              <div id="docMgrList" class="submenu-body scroll">
-                <!-- built in main.ts -->
-              </div>
+              <div id="docMgrList" class="docmgr-list"></div>
             </div>
           </div>
         </div>

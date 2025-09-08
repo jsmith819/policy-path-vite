@@ -1,4 +1,3 @@
-// src/main.ts
 import type { ChangeLogEntry, TokenMap } from './types';
 import { loadTokenMap, saveTokenMap, loadChangeLog, saveChangeLog } from './store';
 import { checkLogin } from './auth';
@@ -50,7 +49,7 @@ const keyFor = (segment: string, policy: string): DocKey => `${segment}::${polic
 const getEffectiveMap = (docKey: DocKey | null): TokenMap =>
   ({ ...(tokenMap || {}), ...(docKey ? (docOverrides[docKey] || {}) : {}) } as TokenMap);
 
-/* ----------------- Data (policy catalog) ----------------- */
+/* ----------------- Data ----------------- */
 
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
@@ -111,7 +110,7 @@ const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
 
-/* Manage Documents submenu elements are optional (guarded) */
+/* NEW: nested doc manager controls (nullable to stay resilient) */
 const manageDocsBtn = document.getElementById('manageDocs') as HTMLElement | null;
 const docMgrMenu    = document.getElementById('docMgrMenu') as HTMLElement | null;
 const docMgrClose   = document.getElementById('docMgrClose') as HTMLElement | null;
@@ -137,10 +136,10 @@ const personInput   = document.getElementById('personInput') as HTMLInputElement
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
 const saveTokensBtn = document.getElementById('saveTokensBtn')!;
 
-const updateTabBtn  = document.getElementById('updatesToggle')!;
+const updateTabBtn  = document.getElementById('updatesToggle') as HTMLButtonElement | null;
 const updatesContent= document.getElementById('updatesContent')!;
 
-const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
+const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement | null;
 
 const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
@@ -214,11 +213,13 @@ adminBtn.addEventListener('click', () => {
   if (!show) hideDocMgr();
 });
 ctxSettings.addEventListener('click', openContextDrawer);
-openContextBtn.addEventListener('click', openContextDrawer);
-updateTabBtn.addEventListener('click', openUpdatesDrawer);
+openContextBtn?.addEventListener('click', openContextDrawer);
+updateTabBtn?.addEventListener('click', openUpdatesDrawer);
 
 drawerScrim.addEventListener('click', closeAllDrawers);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; } });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; }
+});
 
 /* ----------------- Admin menu items ----------------- */
 
@@ -234,7 +235,6 @@ demoReset.addEventListener('click', () => {
   updatesContent.innerHTML = '<p>No updates for this document.</p>';
   updatesContent.classList.add('hidden');
 });
-
 toggleSearchBar.addEventListener('click', () => {
   searchContainer.classList.toggle('hidden');
   adminMenu.style.display = 'none';
@@ -363,20 +363,13 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
-/* Fallback click delegation so wedges always work */
-svgWheel.addEventListener('click', (ev: Event) => {
-  const t = ev.target as HTMLElement;
-  const seg = t.closest?.('.seg') as HTMLElement | null;
-  const name = seg?.getAttribute('data-name');
-  if (name) selectSegment(name, ev);
-});
-
 /* ----------------- Inline token editing ----------------- */
 
 function enableInlineTokenEditing() {
   const root = document.getElementById('docContent');
   if (!root) return;
 
+  // plain-text paste only
   root.addEventListener('paste', (e: any) => {
     const t = (e.target as HTMLElement)?.closest('.token-edit');
     if (!t) return;
@@ -389,13 +382,11 @@ function enableInlineTokenEditing() {
     const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
     if (!el || !currentDocKey) return;
 
-    const key = (el.dataset.key || '') as TokenKey;
-    if (!key) return;
-
+    const key   = el.dataset.key as TokenKey;
     const typed = (el.textContent || '').trim();
 
     if (standaloneDocs.has(currentDocKey)) {
-      const ov = (docOverrides[currentDocKey] ||= {} as Partial<TokenMap>);
+      const ov = (docOverrides[currentDocKey] ||= {});
       const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
       (ov as any)[key] = typed;
       saveOverrides();
@@ -466,7 +457,7 @@ function buildDocMgrMenu() {
         const checked = cb.checked;
         if (checked) {
           standaloneDocs.add(docKey);
-          docOverrides[docKey] ||= {} as Partial<TokenMap>;
+          docOverrides[docKey] ||= {};
         } else {
           standaloneDocs.delete(docKey);
           delete docOverrides[docKey];
@@ -493,30 +484,27 @@ function buildDocMgrMenu() {
 
 function showDocMgr() {
   if (!docMgrMenu || !manageDocsBtn) return;
-  const top = (manageDocsBtn as HTMLElement).offsetTop;
-  (docMgrMenu as HTMLElement).style.top = `${top}px`;
+  const parentRect = (adminMenu as HTMLElement).getBoundingClientRect();
+  const itemRect = (manageDocsBtn as HTMLElement).getBoundingClientRect();
+  const offsetTop = itemRect.top - parentRect.top;
+  docMgrMenu.style.top = `${Math.max(0, offsetTop)}px`;
   buildDocMgrMenu();
   docMgrMenu.classList.add('show');
 }
-function hideDocMgr() {
+function hideDocMgr() { docMgrMenu?.classList.remove('show'); }
+
+manageDocsBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
   if (!docMgrMenu) return;
-  docMgrMenu.classList.remove('show');
-}
+  const open = !docMgrMenu.classList.contains('show');
+  if (open) showDocMgr(); else hideDocMgr();
+});
+docMgrClose?.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
 
-if (manageDocsBtn) {
-  manageDocsBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!docMgrMenu) return;
-    const open = !docMgrMenu.classList.contains('show');
-    if (open) showDocMgr(); else hideDocMgr();
-  });
-}
-if (docMgrClose) {
-  docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
-}
-
+// Close submenu when clicking elsewhere
 document.addEventListener('click', (e) => {
-  const inside = (e.target as Node) && (adminMenu.contains(e.target as Node) || (docMgrMenu?.contains(e.target as Node) ?? false));
+  const t = e.target as Node;
+  const inside = t && (adminMenu.contains(t) || (!!docMgrMenu && docMgrMenu.contains(t)));
   if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
 });
 
