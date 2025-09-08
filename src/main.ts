@@ -1,3 +1,4 @@
+// src/main.ts
 import type { ChangeLogEntry, TokenMap } from './types';
 import { loadTokenMap, saveTokenMap, loadChangeLog, saveChangeLog } from './store';
 import { checkLogin } from './auth';
@@ -49,7 +50,7 @@ const keyFor = (segment: string, policy: string): DocKey => `${segment}::${polic
 const getEffectiveMap = (docKey: DocKey | null): TokenMap =>
   ({ ...(tokenMap || {}), ...(docKey ? (docOverrides[docKey] || {}) : {}) } as TokenMap);
 
-/* ----------------- Data ----------------- */
+/* ----------------- Data (policy catalog) ----------------- */
 
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
@@ -100,21 +101,20 @@ const loginErrorEl  = document.getElementById('loginError')!;
 const loginBtn      = document.getElementById('loginBtn')! as HTMLButtonElement;
 const togglePw      = document.getElementById('togglePw')!;
 
-const adminBtn      = document.getElementById('adminBtn')!;
+const adminBtn      = document.getElementById('adminBtn')! as HTMLButtonElement;
 const adminMenu     = document.getElementById('adminMenu')!;
 const ctxSettings   = document.getElementById('ctxSettings')!;
+const manageDocsBtn = document.getElementById('manageDocs') as HTMLElement | null; // may be absent
+const docMgrMenu    = document.getElementById('docMgrMenu') as HTMLElement | null;
+const docMgrClose   = document.getElementById('docMgrClose') as HTMLElement | null;
+const docMgrList    = document.getElementById('docMgrList') as HTMLElement | null;
+
 const viewTemplate  = document.getElementById('viewTemplate')!;
 const viewUpdates   = document.getElementById('viewUpdates')!;
 const trackChanges  = document.getElementById('trackChanges')!;
 const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
-
-/* NEW: nested doc manager controls (nullable to stay resilient) */
-const manageDocsBtn = document.getElementById('manageDocs') as HTMLElement | null;
-const docMgrMenu    = document.getElementById('docMgrMenu') as HTMLElement | null;
-const docMgrClose   = document.getElementById('docMgrClose') as HTMLElement | null;
-const docMgrList    = document.getElementById('docMgrList') as HTMLElement | null;
 
 const searchContainer = document.getElementById('searchContainer')!;
 const searchInput   = document.getElementById('semanticSearch') as HTMLInputElement;
@@ -136,10 +136,10 @@ const personInput   = document.getElementById('personInput') as HTMLInputElement
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
 const saveTokensBtn = document.getElementById('saveTokensBtn')!;
 
-const updateTabBtn  = document.getElementById('updatesToggle') as HTMLButtonElement | null;
+const updateTabBtn  = document.getElementById('updatesToggle')!;
 const updatesContent= document.getElementById('updatesContent')!;
 
-const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement | null;
+const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
 
 const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
@@ -207,15 +207,35 @@ const openUpdatesDrawer = () => {
   drawerScrim.classList.add('show');
 };
 
-adminBtn.addEventListener('click', () => {
+/* ---- Admin menu open/close (fix: stopPropagation & ignore clicks on the cog) ---- */
+
+adminBtn.addEventListener('click', (e) => {
+  e.stopPropagation(); // <-- prevents global closer from firing for this click
   const show = adminMenu.style.display !== 'block';
   adminMenu.style.display = show ? 'block' : 'none';
   if (!show) hideDocMgr();
 });
-ctxSettings.addEventListener('click', openContextDrawer);
-openContextBtn?.addEventListener('click', openContextDrawer);
-updateTabBtn?.addEventListener('click', openUpdatesDrawer);
+// clicks inside menus should not bubble to document
+adminMenu.addEventListener('click', (e) => e.stopPropagation());
+docMgrMenu?.addEventListener('click', (e) => e.stopPropagation());
 
+ctxSettings.addEventListener('click', openContextDrawer);
+openContextBtn.addEventListener('click', openContextDrawer);
+updateTabBtn.addEventListener('click', openUpdatesDrawer);
+
+// Close menus when clicking outside (but ignore the cog button itself)
+document.addEventListener('click', (e) => {
+  const t = e.target as Node;
+  const clickedCog = adminBtn.contains(t);
+  const insidePrimary = adminMenu.contains(t);
+  const insideSub = !!docMgrMenu && docMgrMenu.contains(t);
+  if (!clickedCog && !insidePrimary && !insideSub) {
+    hideDocMgr();
+    adminMenu.style.display = 'none';
+  }
+});
+
+// Also close drawers via scrim/Escape
 drawerScrim.addEventListener('click', closeAllDrawers);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; }
@@ -235,6 +255,7 @@ demoReset.addEventListener('click', () => {
   updatesContent.innerHTML = '<p>No updates for this document.</p>';
   updatesContent.classList.add('hidden');
 });
+
 toggleSearchBar.addEventListener('click', () => {
   searchContainer.classList.toggle('hidden');
   adminMenu.style.display = 'none';
@@ -330,10 +351,12 @@ function selectSegment(segmentOrKey: string, evt: Event) {
         if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
         return;
       }
+      // record current doc
       currentSegment = segmentName;
       currentPolicy  = policy;
       currentDocKey  = keyFor(segmentName, policy);
 
+      // render with effective (global + per-doc) map
       const eff = getEffectiveMap(currentDocKey);
       loadAndRender(segmentName, policy, eff, changeLog);
     },
@@ -353,6 +376,7 @@ function selectSegment(segmentOrKey: string, evt: Event) {
     return;
   }
 
+  // set & render first item too (when opening via wedge click, no pill click yet)
   currentSegment = segmentName;
   currentPolicy  = initial;
   currentDocKey  = keyFor(segmentName, initial);
@@ -385,22 +409,26 @@ function enableInlineTokenEditing() {
     const key   = el.dataset.key as TokenKey;
     const typed = (el.textContent || '').trim();
 
+    // Decide where to save: per-doc if standalone, else global
     if (standaloneDocs.has(currentDocKey)) {
       const ov = (docOverrides[currentDocKey] ||= {});
       const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
-      (ov as any)[key] = typed;
+      ov[key] = typed as any;
       saveOverrides();
+
       pushChangeLog(key, before, typed);
     } else {
       const before = String((tokenMap[key] ?? '') as any);
       (tokenMap as any)[key] = typed;
       tokenMap.updatedAt = new Date().toISOString();
       saveTokenMap(tokenMap);
+
       pushChangeLog(key, before, typed);
     }
 
     updateLastUpdatedUI(tokenMap);
 
+    // mark all occurrences as saved (green)
     document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
       if (span !== el) span.textContent = typed;
       span.classList.add('token-saved');
@@ -443,7 +471,7 @@ function buildDocMgrMenu() {
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = standaloneDocs.has(docKey);
-      (cb as any).dataset.doc = docKey;
+      cb.dataset.doc = docKey;
 
       const title = document.createElement('span');
       title.className = 'dm-title';
@@ -466,6 +494,7 @@ function buildDocMgrMenu() {
         saveStandalone(standaloneDocs);
         saveOverrides();
 
+        // if the current doc was toggled, re-render with new effective map
         if (currentDocKey === docKey && currentSegment && currentPolicy) {
           const eff = getEffectiveMap(currentDocKey);
           loadAndRender(currentSegment, currentPolicy, eff, changeLog);
@@ -484,14 +513,14 @@ function buildDocMgrMenu() {
 
 function showDocMgr() {
   if (!docMgrMenu || !manageDocsBtn) return;
-  const parentRect = (adminMenu as HTMLElement).getBoundingClientRect();
-  const itemRect = (manageDocsBtn as HTMLElement).getBoundingClientRect();
-  const offsetTop = itemRect.top - parentRect.top;
-  docMgrMenu.style.top = `${Math.max(0, offsetTop)}px`;
+  const top = (manageDocsBtn as HTMLElement).offsetTop;
+  (docMgrMenu as HTMLElement).style.top = `${top}px`;
   buildDocMgrMenu();
   docMgrMenu.classList.add('show');
 }
-function hideDocMgr() { docMgrMenu?.classList.remove('show'); }
+function hideDocMgr() {
+  docMgrMenu?.classList.remove('show');
+}
 
 manageDocsBtn?.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -500,13 +529,6 @@ manageDocsBtn?.addEventListener('click', (e) => {
   if (open) showDocMgr(); else hideDocMgr();
 });
 docMgrClose?.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
-
-// Close submenu when clicking elsewhere
-document.addEventListener('click', (e) => {
-  const t = e.target as Node;
-  const inside = t && (adminMenu.contains(t) || (!!docMgrMenu && docMgrMenu.contains(t)));
-  if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
-});
 
 /* ----------------- Search ----------------- */
 
