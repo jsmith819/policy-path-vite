@@ -111,10 +111,11 @@ const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
 
-const manageDocsBtn = document.getElementById('manageDocs')!;
-const docMgrMenu    = document.getElementById('docMgrMenu')!;
-const docMgrClose   = document.getElementById('docMgrClose')!;
-const docMgrList    = document.getElementById('docMgrList')!;
+/* Manage Documents submenu elements are optional (guarded) */
+const manageDocsBtn = document.getElementById('manageDocs') as HTMLElement | null;
+const docMgrMenu    = document.getElementById('docMgrMenu') as HTMLElement | null;
+const docMgrClose   = document.getElementById('docMgrClose') as HTMLElement | null;
+const docMgrList    = document.getElementById('docMgrList') as HTMLElement | null;
 
 const searchContainer = document.getElementById('searchContainer')!;
 const searchInput   = document.getElementById('semanticSearch') as HTMLInputElement;
@@ -329,12 +330,10 @@ function selectSegment(segmentOrKey: string, evt: Event) {
         if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
         return;
       }
-      // record current doc
       currentSegment = segmentName;
       currentPolicy  = policy;
       currentDocKey  = keyFor(segmentName, policy);
 
-      // render with effective (global + per-doc) map
       const eff = getEffectiveMap(currentDocKey);
       loadAndRender(segmentName, policy, eff, changeLog);
     },
@@ -354,7 +353,6 @@ function selectSegment(segmentOrKey: string, evt: Event) {
     return;
   }
 
-  // set & render first item too (when opening via wedge click, no pill click yet)
   currentSegment = segmentName;
   currentPolicy  = initial;
   currentDocKey  = keyFor(segmentName, initial);
@@ -365,13 +363,20 @@ function selectSegment(segmentOrKey: string, evt: Event) {
 
 drawWheel(svgWheel, selectSegment);
 
+/* Fallback click delegation so wedges always work */
+svgWheel.addEventListener('click', (ev: Event) => {
+  const t = ev.target as HTMLElement;
+  const seg = t.closest?.('.seg') as HTMLElement | null;
+  const name = seg?.getAttribute('data-name');
+  if (name) selectSegment(name, ev);
+});
+
 /* ----------------- Inline token editing ----------------- */
 
 function enableInlineTokenEditing() {
   const root = document.getElementById('docContent');
   if (!root) return;
 
-  // plain-text paste only
   root.addEventListener('paste', (e: any) => {
     const t = (e.target as HTMLElement)?.closest('.token-edit');
     if (!t) return;
@@ -384,29 +389,27 @@ function enableInlineTokenEditing() {
     const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
     if (!el || !currentDocKey) return;
 
-    const key   = el.dataset.key as TokenKey;
+    const key = (el.dataset.key || '') as TokenKey;
+    if (!key) return;
+
     const typed = (el.textContent || '').trim();
 
-    // Decide where to save: per-doc if standalone, else global
     if (standaloneDocs.has(currentDocKey)) {
-      const ov = (docOverrides[currentDocKey] ||= {});
+      const ov = (docOverrides[currentDocKey] ||= {} as Partial<TokenMap>);
       const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
-      ov[key] = typed as any;
+      (ov as any)[key] = typed;
       saveOverrides();
-
       pushChangeLog(key, before, typed);
     } else {
       const before = String((tokenMap[key] ?? '') as any);
       (tokenMap as any)[key] = typed;
       tokenMap.updatedAt = new Date().toISOString();
       saveTokenMap(tokenMap);
-
       pushChangeLog(key, before, typed);
     }
 
     updateLastUpdatedUI(tokenMap);
 
-    // mark all occurrences as saved (green)
     document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
       if (span !== el) span.textContent = typed;
       span.classList.add('token-saved');
@@ -449,7 +452,7 @@ function buildDocMgrMenu() {
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = standaloneDocs.has(docKey);
-      cb.dataset.doc = docKey;
+      (cb as any).dataset.doc = docKey;
 
       const title = document.createElement('span');
       title.className = 'dm-title';
@@ -463,7 +466,7 @@ function buildDocMgrMenu() {
         const checked = cb.checked;
         if (checked) {
           standaloneDocs.add(docKey);
-          docOverrides[docKey] ||= {};
+          docOverrides[docKey] ||= {} as Partial<TokenMap>;
         } else {
           standaloneDocs.delete(docKey);
           delete docOverrides[docKey];
@@ -472,7 +475,6 @@ function buildDocMgrMenu() {
         saveStandalone(standaloneDocs);
         saveOverrides();
 
-        // if the current doc was toggled, re-render with new effective map
         if (currentDocKey === docKey && currentSegment && currentPolicy) {
           const eff = getEffectiveMap(currentDocKey);
           loadAndRender(currentSegment, currentPolicy, eff, changeLog);
@@ -490,27 +492,31 @@ function buildDocMgrMenu() {
 }
 
 function showDocMgr() {
-  // align submenu vertically with its parent item
+  if (!docMgrMenu || !manageDocsBtn) return;
   const top = (manageDocsBtn as HTMLElement).offsetTop;
   (docMgrMenu as HTMLElement).style.top = `${top}px`;
   buildDocMgrMenu();
   docMgrMenu.classList.add('show');
 }
 function hideDocMgr() {
+  if (!docMgrMenu) return;
   docMgrMenu.classList.remove('show');
 }
 
-manageDocsBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const open = !docMgrMenu.classList.contains('show');
-  // keep primary dropdown open while toggling submenu
-  if (open) showDocMgr(); else hideDocMgr();
-});
-docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
+if (manageDocsBtn) {
+  manageDocsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!docMgrMenu) return;
+    const open = !docMgrMenu.classList.contains('show');
+    if (open) showDocMgr(); else hideDocMgr();
+  });
+}
+if (docMgrClose) {
+  docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
+}
 
-// Close submenu when clicking elsewhere
 document.addEventListener('click', (e) => {
-  const inside = (e.target as Node) && (adminMenu.contains(e.target as Node) || docMgrMenu.contains(e.target as Node));
+  const inside = (e.target as Node) && (adminMenu.contains(e.target as Node) || (docMgrMenu?.contains(e.target as Node) ?? false));
   if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
 });
 
