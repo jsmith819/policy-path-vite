@@ -10,36 +10,49 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
     : 'Last updated: Never';
 }
 
-// Helpers
+/* ---------------- helpers ---------------- */
+
 const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
 const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s");
 
 function canonicalKey(k: string): string {
   const kk = (k || '').toLowerCase().trim();
   if (kk === 'organisational' || kk === 'organizational') return 'organisation_name';
-  if (kk === 'organisation' || kk === 'organization') return 'organisation_name';
+  if (kk === 'organisation'   || kk === 'organization')   return 'organisation_name';
   if (kk === 'organisation_name' || kk === 'organization_name' || kk === 'org' || kk === 'org_name')
     return 'organisation_name';
-  if (kk === 'organisation_short' || kk === 'org_short') return 'organisation_short';
+  if (kk === 'organisation_short' || kk === 'org_short')   return 'organisation_short';
   if (kk === 'resident' || kk === 'resident_name' || kk === 'consumer') return 'person';
   if (kk === 'person' || kk === 'persons') return 'person';
   if (kk === 'service' || kk === 'service-type' || kk === 'service_type') return 'service_type';
   return kk;
 }
 
-function escHtml(s: string): string {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c]
-  );
+const FRIENDLY: Record<string, string> = {
+  organisation_name:  'Organisation Name',
+  organisation_short: 'Short Organisation Name',
+  person:             'Person',
+  service_type:       'Service Type',
+};
+
+function friendlyField(key: string) {
+  return FRIENDLY[canonicalKey(key)] || key;
 }
 
-function tokenSpan(key: string, value: string, savedKeys?: Set<string>): string {
-  const k = canonicalKey(key);
-  const savedCls = savedKeys && savedKeys.has(k) ? ' token-saved' : '';
-  return `<span class="token-edit${savedCls}" data-key="${k}" contenteditable="true" spellcheck="false">${escHtml(
-    value ?? ''
-  )}</span>`;
+function relTime(iso: string) {
+  const then = new Date(iso).getTime();
+  const now  = Date.now();
+  const s = Math.max(1, Math.round((now - then) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
 }
+
+/* ---------------- policies list renderer ---------------- */
 
 export function renderPolicies(
   _segmentName: string,
@@ -64,87 +77,100 @@ export function renderPolicies(
   });
 }
 
-/** Build the Updates drawer content (left side). */
+/* ---------------- Updates drawer content ---------------- */
+
 export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   const upEl = document.getElementById('updatesContent');
   if (!upEl) return;
 
-  const CURLY = /\{\{\s*([\w_]+)\s*\}\}/gi;
+  // Collect token keys present in the document so we only show relevant updates
+  const CURLY  = /\{\{\s*([\w_]+)\s*\}\}/gi;
   const SQUARE = /\[\s*([\w_]+)\s*(?:['’]s)?\s*\]/gi;
 
   const tokens = new Set<string>();
-  for (const m of html.matchAll(CURLY)) tokens.add(canonicalKey(m[1] || ''));
+  for (const m of html.matchAll(CURLY))  tokens.add(canonicalKey(m[1] || ''));
   for (const m of html.matchAll(SQUARE)) tokens.add(canonicalKey(m[1] || ''));
 
   const relevant = Array.isArray(changeLog)
     ? changeLog
-        .filter(e => tokens.has(canonicalKey(e.field as string)))
+        .filter(e => tokens.has(canonicalKey(String(e.field))))
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     : [];
 
   if (!relevant.length) {
     upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
-    return;
+    return; // keep drawer visibility controlled by main.ts
   }
 
-  const items = relevant
-    .map(e => {
-      const ts = new Date(e.timestamp).toLocaleString();
-      const field = canonicalKey(String(e.field || ''));
-      const oldV = escHtml(String(e.oldValue ?? '—'));
-      const newV = escHtml(String(e.newValue ?? '—'));
-      const who = escHtml(String(e.user || 'unknown'));
-      return `
-      <li class="update-item">
-        <div class="update-head"><strong>${ts}</strong> — ${who}</div>
-        <div class="update-body">Changed <em>${field}</em><br>
-          <span class="delta"><span class="from">“${oldV}”</span> → <span class="to">“${newV}”</span></span>
-        </div>
-      </li>`;
-    })
-    .join('');
+  const uniqueFields = Array.from(new Set(relevant.map(r => canonicalKey(String(r.field)))));
+  const latestTs = relevant[0]?.timestamp;
 
-  upEl.innerHTML = `<ul class="updates-list">${items}</ul>`;
+  const summaryHtml = `
+    <div class="updates-summary">
+      <div><strong>${relevant.length}</strong> change${relevant.length === 1 ? '' : 's'} · ${uniqueFields.length} field${uniqueFields.length === 1 ? '' : 's'}</div>
+      <div class="muted">Latest: ${relTime(latestTs)}</div>
+    </div>
+  `;
+
+  const listHtml = relevant.map(e => {
+    const field = friendlyField(String(e.field));
+    const oldV  = (e.oldValue ?? '—').toString();
+    const newV  = (e.newValue ?? '—').toString();
+    const who   = (e.user || 'unknown');
+    const when  = relTime(e.timestamp);
+    return `
+      <li class="update-item">
+        <div class="update-head">
+          <span class="update-field">${field}</span>
+          <span class="update-meta">· ${who} · ${when}</span>
+        </div>
+        <div class="update-body">
+          <span class="delta"><span class="from">“${escapeHtml(oldV)}”</span> → <span class="to">“${escapeHtml(newV)}”</span></span>
+        </div>
+      </li>
+    `;
+  }).join('');
+
+  upEl.innerHTML = `${summaryHtml}<ul class="updates-list">${listHtml}</ul>`;
 }
 
-/** Replace tokens with editable spans. Marks green for any token seen in changeLog (persist on reload). */
-export function replaceTokens(
-  html: string,
-  tokenMap: TokenMap,
-  savedKeys?: Set<string>
-) {
+// basic HTML escape for values shown in updates
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (ch) =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' } as Record<string,string>)[ch]
+  );
+}
+
+/* ---------------- token replacement ---------------- */
+
+export function replaceTokens(html: string, tokenMap: TokenMap) {
   const get = (key: string) => (tokenMap as any)[key];
   let out = html;
 
-  // 123 placeholders map to "person"
   const p = String(get('person') || '');
-  out = out.replace(/\b123['’]s\b/g, tokenSpan('person', possessive(p), savedKeys));
-  out = out.replace(/\b123s\b/g, tokenSpan('person', p ? (p.endsWith('s') ? p : p + 's') : '', savedKeys));
-  out = out.replace(/\b123\b/g, tokenSpan('person', p, savedKeys));
+  out = out.replace(/\b123['’]s\b/g, possessive(p));
+  out = out.replace(/\b123s\b/g, p ? (p.endsWith('s') ? p : p + 's') : '123s');
+  out = out.replace(/\b123\b/g, p || '123');
 
-  // [key's] or [key’s]
   out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k: string) => {
-    const kk = canonicalKey(k);
-    const v = get(kk);
-    return tokenSpan(kk, v ? possessive(String(v)) : `[${k}'s]`, savedKeys);
+    const v = get(canonicalKey(k));
+    return v ? possessive(String(v)) : `[${k}'s]`;
   });
 
-  // [key]
   out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
-    const kk = canonicalKey(k);
-    const v = get(kk);
-    return tokenSpan(kk, (v ?? `[${k}]`) as string, savedKeys);
+    const v = get(canonicalKey(k));
+    return (v ?? `[${k}]`) as string;
   });
 
-  // {{ key }}
   out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
-    const kk = canonicalKey(k);
-    const v = get(kk);
-    return tokenSpan(kk, (v ?? `{{${k}}}`) as string, savedKeys);
+    const v = get(canonicalKey(k));
+    return (v ?? `{{${k}}}`) as string;
   });
 
   return out;
 }
+
+/* ---------------- load & render document ---------------- */
 
 export async function loadAndRender(
   segment: string,
@@ -157,18 +183,11 @@ export async function loadAndRender(
   try {
     const fileName = filenameFor(segment, policy);
     const html = await fetchDocumentHtml(fileName);
-
-    // Build set of tokens that have been edited at least once -> persist green on render
-    const savedKeys = new Set<string>(
-      (changeLog || []).map(e => canonicalKey(String(e.field || '')))
-    );
-
-    const tokenised = replaceTokens(html, tokenMap, savedKeys);
+    const tokenised = replaceTokens(html, tokenMap);
     if (docEl) docEl.innerHTML = tokenised;
-
-    buildUpdatesPanel(html, changeLog);
+    buildUpdatesPanel(html, changeLog); // fill left drawer with new format
   } catch (err: any) {
-    if (docEl) docEl.innerHTML = `<p>Error loading document: ${escHtml(err?.message || String(err))}</p>`;
+    if (docEl) docEl.innerHTML = `<p>Error loading document: ${String(err?.message || err)}</p>`;
     const upEl = document.getElementById('updatesContent');
     if (upEl) upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
   }
