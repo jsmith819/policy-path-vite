@@ -39,7 +39,7 @@
             <ul>
               <li class="admin-only" id="ctxSettings">Contextual Settings</li>
 
-              <!-- NEW: Manage Documents (opens nested submenu) -->
+              <!-- Manage Documents (opens nested submenu) -->
               <li class="admin-only" id="manageDocs">Manage Documents ▸</li>
 
               <li class="admin-only" id="viewTemplate">View Template</li>
@@ -50,7 +50,7 @@
               <li id="logout">Logout</li>
             </ul>
 
-            <!-- NEW: nested submenu for Document Manager -->
+            <!-- Nested submenu for Document Manager -->
             <div id="docMgrMenu" class="dropdown dropdown-sub">
               <div class="docmgr-head">
                 <strong>Document Manager</strong>
@@ -96,6 +96,15 @@
         </div>
 
         <div id="docContent">Select a document</div>
+
+        <!-- Review/approval bar for pending inline edits -->
+        <div id="reviewBar" class="review-bar hidden" role="region" aria-live="polite">
+          <label class="review-check">
+            <input type="checkbox" id="approvePendingChk" />
+            Approve all pending changes (turn green)
+          </label>
+          <span class="review-hint">Pending changes are highlighted amber until approved.</span>
+        </div>
       </div>
 
       <!-- LEFT: Updates drawer -->
