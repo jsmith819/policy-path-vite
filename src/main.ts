@@ -21,35 +21,26 @@ let changeLog: ChangeLogEntry[] = loadChangeLog();
 
 const STANDALONE_KEY = 'pp_standalone_docs';
 const OVERRIDES_KEY  = 'pp_doc_overrides';
-const CONFIRM_KEY    = 'pp_doc_confirm';
 
 type DocOverrides = Record<DocKey, Partial<TokenMap>>;
-type ConfirmMap   = Record<DocKey, boolean>;
 
 const loadStandalone = (): Set<DocKey> => {
   try { return new Set(JSON.parse(localStorage.getItem(STANDALONE_KEY) || '[]')); }
   catch { return new Set(); }
 };
-const saveStandalone = (s: Set<DocKey>) =>
+const saveStandalone = (s: Set<DocKey>) => {
   localStorage.setItem(STANDALONE_KEY, JSON.stringify([...s]));
-
+};
 const loadOverrides = (): DocOverrides => {
   try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') as DocOverrides; }
   catch { return {}; }
 };
-const saveOverrides = () =>
+const saveOverrides = () => {
   localStorage.setItem(OVERRIDES_KEY, JSON.stringify(docOverrides));
-
-const loadConfirmMap = (): ConfirmMap => {
-  try { return JSON.parse(localStorage.getItem(CONFIRM_KEY) || '{}') as ConfirmMap; }
-  catch { return {}; }
 };
-const saveConfirmMap = () =>
-  localStorage.setItem(CONFIRM_KEY, JSON.stringify(confirmMap));
 
 let standaloneDocs = loadStandalone();
 let docOverrides: DocOverrides = loadOverrides();
-let confirmMap: ConfirmMap = loadConfirmMap();
 
 let currentSegment: string | null = null;
 let currentPolicy : string | null = null;
@@ -59,7 +50,7 @@ const keyFor = (segment: string, policy: string): DocKey => `${segment}::${polic
 const getEffectiveMap = (docKey: DocKey | null): TokenMap =>
   ({ ...(tokenMap || {}), ...(docKey ? (docOverrides[docKey] || {}) : {}) } as TokenMap);
 
-/* ----------------- Data ----------------- */
+/* ----------------- Data (policy catalog) ----------------- */
 
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
@@ -120,6 +111,7 @@ const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
 
+/* NEW: Manage docs submenu */
 const manageDocsBtn = document.getElementById('manageDocs')!;
 const docMgrMenu    = document.getElementById('docMgrMenu')!;
 const docMgrClose   = document.getElementById('docMgrClose')!;
@@ -138,10 +130,6 @@ const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGS
 const adminPopup    = document.getElementById('adminPopup')!;      // Right drawer
 const updatesDrawer = document.getElementById('updatesDrawer')!;   // Left drawer
 const drawerScrim   = document.getElementById('drawerScrim')!;
-
-/* Doc confirm row */
-const docConfirmRow = document.getElementById('docConfirmRow')!;
-const docConfirmTog = document.getElementById('docConfirmTog') as HTMLInputElement;
 
 const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement;
 const orgInput      = document.getElementById('orgInput') as HTMLInputElement;
@@ -195,42 +183,16 @@ logoutBtn.addEventListener('click', () => {
   currentUsername = null;
 });
 
-/* ----------------- Admin dropdown (robust open/close) ----------------- */
-
-// prevent outside-click handler from closing immediately
-adminBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const willShow = adminMenu.style.display !== 'block';
-  adminMenu.style.display = willShow ? 'block' : 'none';
-  if (willShow) {
-    // keep submenu hidden until requested
-    docMgrMenu.classList.remove('show');
-
-    // ensure it stays on-screen (open to the left if needed)
-    const rect = adminMenu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-      (adminMenu as HTMLElement).style.right = '0';
-      (adminMenu as HTMLElement).style.left  = 'auto';
-    }
-  }
-});
-adminMenu.addEventListener('click', (e) => e.stopPropagation());
-docMgrMenu.addEventListener('click', (e) => e.stopPropagation());
-
-// close when clicking outside
-document.addEventListener('click', () => {
-  docMgrMenu.classList.remove('show');
-  adminMenu.style.display = 'none';
-});
-
 /* ----------------- Drawers ----------------- */
 
 const closeAllDrawers = () => {
   adminPopup.classList.remove('open');
   updatesDrawer.classList.remove('open');
   drawerScrim.classList.remove('show');
+  // keep the list hidden until the drawer is reopened
   updatesContent.classList.add('hidden');
 };
+
 const openContextDrawer = () => {
   adminMenu.style.display = 'none';
   orgInput.value      = tokenMap.organisation_name;
@@ -240,18 +202,25 @@ const openContextDrawer = () => {
   adminPopup.classList.add('open');
   drawerScrim.classList.add('show');
 };
+
 const openUpdatesDrawer = () => {
+  // reveal the content list when opening the drawer
   updatesContent.classList.remove('hidden');
   updatesDrawer.classList.add('open');
   drawerScrim.classList.add('show');
 };
 
+adminBtn.addEventListener('click', () => {
+  const show = adminMenu.style.display !== 'block';
+  adminMenu.style.display = show ? 'block' : 'none';
+  if (!show) hideDocMgr();
+});
 ctxSettings.addEventListener('click', openContextDrawer);
 openContextBtn.addEventListener('click', openContextDrawer);
 updateTabBtn.addEventListener('click', openUpdatesDrawer);
 
-drawerScrim.addEventListener('click', closeAllDrawers);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); adminMenu.style.display = 'none'; } });
+drawerScrim.addEventListener('click', () => { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; } });
 
 /* ----------------- Admin menu items ----------------- */
 
@@ -305,9 +274,6 @@ saveTokensBtn.addEventListener('click', () => {
 
   updateLastUpdated();
   closeAllDrawers();
-
-  // re-apply confirm styling (if this doc is open and confirmed)
-  if (currentDocKey) applyConfirmToTokens(currentDocKey, !!confirmMap[currentDocKey]);
 });
 
 /* ----------------- Change log modal ----------------- */
@@ -366,13 +332,17 @@ function selectSegment(segmentOrKey: string, evt: Event) {
         if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
         return;
       }
+      // record current doc
       currentSegment = segmentName;
       currentPolicy  = policy;
       currentDocKey  = keyFor(segmentName, policy);
 
+      // render with effective (global + per-doc) map
       const eff = getEffectiveMap(currentDocKey);
-      const p = loadAndRender(segmentName, policy, eff, changeLog);
-      Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
+      loadAndRender(segmentName, policy, eff, changeLog).then(() => {
+        ensureDocFooter();            // ensure footer exists
+        wireDocFooterHandlers();      // make the checkbox work
+      });
     },
     color
   );
@@ -390,18 +360,66 @@ function selectSegment(segmentOrKey: string, evt: Event) {
     return;
   }
 
+  // set & render first item too (when opening via wedge click, no pill click yet)
   currentSegment = segmentName;
   currentPolicy  = initial;
   currentDocKey  = keyFor(segmentName, initial);
-  if (docEl) docEl.textContent = 'Loading…';
   const eff = getEffectiveMap(currentDocKey);
-  const p = loadAndRender(segmentName, initial, eff, changeLog);
-  Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
+  if (docEl) docEl.textContent = 'Loading…';
+  loadAndRender(segmentName, initial, eff, changeLog).then(() => {
+    ensureDocFooter();
+    wireDocFooterHandlers();
+  });
 }
 
 drawWheel(svgWheel, selectSegment);
 
 /* ----------------- Inline token editing ----------------- */
+
+function pushChangeLog(field: TokenKey, oldValue: string, newValue: string) {
+  const entry: ChangeLogEntry = {
+    field,
+    oldValue,
+    newValue,
+    user: currentUsername || 'unknown',
+    timestamp: new Date().toISOString()
+  };
+  changeLog.push(entry);
+  saveChangeLog(changeLog);
+}
+
+function ensureDocFooter() {
+  const viewer = document.getElementById('docViewer');
+  if (!viewer) return;
+  let footer = viewer.querySelector('.doc-footer');
+  if (!footer) {
+    footer = document.createElement('div');
+    footer.className = 'doc-footer';
+    footer.innerHTML = `
+      <label class="confirm-changes">
+        <input type="checkbox" id="confirmDocChanges" />
+        Mark current changes as reviewed
+      </label>
+    `;
+    viewer.appendChild(footer);
+  } else {
+    const cb = footer.querySelector<HTMLInputElement>('#confirmDocChanges');
+    if (cb) cb.checked = false;
+  }
+}
+
+function wireDocFooterHandlers() {
+  const cb = document.getElementById('confirmDocChanges') as HTMLInputElement | null;
+  if (!cb) return;
+  cb.onchange = () => {
+    if (!cb.checked) return;
+    // turn all amber tokens to green
+    document.querySelectorAll<HTMLElement>('#docContent .token-edit.token-pending').forEach(el => {
+      el.classList.remove('token-pending');
+      el.classList.add('token-saved');
+    });
+  };
+}
 
 function enableInlineTokenEditing() {
   const root = document.getElementById('docContent');
@@ -423,44 +441,39 @@ function enableInlineTokenEditing() {
     const key   = el.dataset.key as TokenKey;
     const typed = (el.textContent || '').trim();
 
-    // Save per-doc if standalone, else global
+    // Decide where to save: per-doc if standalone, else global
     if (standaloneDocs.has(currentDocKey)) {
       const ov = (docOverrides[currentDocKey] ||= {});
       const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
       ov[key] = typed as any;
       saveOverrides();
+
       pushChangeLog(key, before, typed);
     } else {
       const before = String((tokenMap[key] ?? '') as any);
       (tokenMap as any)[key] = typed;
       tokenMap.updatedAt = new Date().toISOString();
       saveTokenMap(tokenMap);
+
       pushChangeLog(key, before, typed);
     }
 
     updateLastUpdatedUI(tokenMap);
 
-    // mark this key as saved (green) immediately
+    // mark all occurrences as pending (amber) until confirmed
     document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
       if (span !== el) span.textContent = typed;
-      span.classList.add('token-saved');
+      span.classList.remove('token-saved');
+      span.classList.add('token-pending');
     });
+
+    // make sure footer + handler are present
+    ensureDocFooter();
+    wireDocFooterHandlers();
   });
 }
 
-function pushChangeLog(field: TokenKey, oldValue: string, newValue: string) {
-  const entry: ChangeLogEntry = {
-    field,
-    oldValue,
-    newValue,
-    user: currentUsername || 'unknown',
-    timestamp: new Date().toISOString()
-  };
-  changeLog.push(entry);
-  saveChangeLog(changeLog);
-}
-
-/* ----------------- Document Manager submenu ----------------- */
+/* ----------------- Document Manager (nested drop-down) ----------------- */
 
 function buildDocMgrMenu() {
   if (!docMgrList) return;
@@ -509,8 +522,10 @@ function buildDocMgrMenu() {
         // if the current doc was toggled, re-render with new effective map
         if (currentDocKey === docKey && currentSegment && currentPolicy) {
           const eff = getEffectiveMap(currentDocKey);
-          const p = loadAndRender(currentSegment, currentPolicy, eff, changeLog);
-          Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
+          loadAndRender(currentSegment, currentPolicy, eff, changeLog).then(() => {
+            ensureDocFooter();
+            wireDocFooterHandlers();
+          });
         }
       });
 
@@ -525,51 +540,30 @@ function buildDocMgrMenu() {
 }
 
 function showDocMgr() {
-  const top = (manageDocsBtn as HTMLElement).offsetTop;
+  // align submenu vertically with its parent item
+  const parentRect = (manageDocsBtn as HTMLElement).getBoundingClientRect();
+  const containerRect = (adminMenu as HTMLElement).getBoundingClientRect();
+  const top = parentRect.top - containerRect.top; // relative within adminMenu
   (docMgrMenu as HTMLElement).style.top = `${top}px`;
-  buildDocMgrMenu();
   docMgrMenu.classList.add('show');
+  buildDocMgrMenu();
 }
-function hideDocMgr() { docMgrMenu.classList.remove('show'); }
+function hideDocMgr() {
+  docMgrMenu.classList.remove('show');
+}
 
-manageDocsBtn.addEventListener('click', (e) => {
+manageDocsBtn?.addEventListener('click', (e) => {
   e.stopPropagation();
   const open = !docMgrMenu.classList.contains('show');
   if (open) showDocMgr(); else hideDocMgr();
 });
-docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
+docMgrClose?.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
 
-/* ----------------- Confirm row behaviour ----------------- */
-
-function setConfirmUIForCurrentDoc() {
-  if (!currentDocKey) return;
-
-  const hasTokens = !!document.querySelector('#docContent .token-edit');
-  if (hasTokens) {
-    docConfirmRow.classList.remove('hidden');
-  } else {
-    docConfirmRow.classList.add('hidden');
-  }
-
-  const checked = !!confirmMap[currentDocKey];
-  docConfirmTog.checked = checked;
-  applyConfirmToTokens(currentDocKey, checked);
-}
-
-function applyConfirmToTokens(docKey: DocKey, confirmed: boolean) {
-  const tokens = document.querySelectorAll<HTMLElement>('#docContent .token-edit');
-  tokens.forEach(t => {
-    if (confirmed) t.classList.add('token-saved');
-    else           t.classList.remove('token-saved');
-  });
-}
-
-// toggle handler
-docConfirmTog.addEventListener('change', () => {
-  if (!currentDocKey) return;
-  confirmMap[currentDocKey] = !!docConfirmTog.checked;
-  saveConfirmMap();
-  applyConfirmToTokens(currentDocKey, !!docConfirmTog.checked);
+// Close submenu when clicking elsewhere
+document.addEventListener('click', (e) => {
+  const target = e.target as Node;
+  const inside = target && (adminMenu.contains(target) || docMgrMenu.contains(target));
+  if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
 });
 
 /* ----------------- Search ----------------- */
@@ -591,8 +585,10 @@ searchBtn.addEventListener('click', () => {
         currentPolicy  = doc.policy;
         currentDocKey  = keyFor(doc.segment, doc.policy);
         const eff = getEffectiveMap(currentDocKey);
-        const p = loadAndRender(doc.segment, doc.policy, eff, changeLog);
-        Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
+        loadAndRender(doc.segment, doc.policy, eff, changeLog).then(() => {
+          ensureDocFooter();
+          wireDocFooterHandlers();
+        });
       });
       resultsContent.appendChild(div);
     }
