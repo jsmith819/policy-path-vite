@@ -34,25 +34,22 @@
           <div id="updateBox">Last updated: Never</div>
           <button id="adminBtn" aria-label="Admin">⚙️</button>
 
-          <!-- Primary admin dropdown -->
+          <!-- Primary admin dropdown (anchored to top-right cluster) -->
           <div id="adminMenu" class="dropdown">
             <ul>
               <li class="admin-only" id="ctxSettings">Contextual Settings</li>
-
-              <!-- Manage Documents (opens nested submenu) -->
               <li class="admin-only" id="manageDocs">Manage Documents ▸</li>
-
               <li class="admin-only" id="viewTemplate">View Template</li>
               <li class="admin-only" id="viewUpdates">View Updates</li>
-              <li id="trackChanges">Track Changes</li>
+              <li id="trackChanges">Change Log</li>
               <li class="admin-only" id="demoReset">Demo Reset</li>
               <li class="admin-only" id="toggleSearchBar">Toggle Search Bar</li>
               <li id="logout">Logout</li>
             </ul>
 
-            <!-- Nested submenu for Document Manager -->
-            <div id="docMgrMenu" class="dropdown dropdown-sub">
-              <div class="docmgr-head">
+            <!-- Nested submenu (opens to the LEFT) -->
+            <div id="docMgrMenu" class="dropdown dropdown-sub" role="menu" aria-label="Document manager">
+              <div class="docmgr-head" style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;border-bottom:1px solid #eee;">
                 <strong>Document Manager</strong>
                 <button id="docMgrClose" class="icon-btn" aria-label="Close">×</button>
               </div>
@@ -97,13 +94,12 @@
 
         <div id="docContent">Select a document</div>
 
-        <!-- Review/approval bar for pending inline edits -->
-        <div id="reviewBar" class="review-bar hidden" role="region" aria-live="polite">
-          <label class="review-check">
-            <input type="checkbox" id="approvePendingChk" />
-            Approve all pending changes (turn green)
+        <!-- Doc footer: confirm/approve all changed tokens in this doc -->
+        <div class="doc-footer">
+          <label class="confirm-changes">
+            <input type="checkbox" id="confirmChanges" />
+            Mark edited terms in this document as reviewed (turn green)
           </label>
-          <span class="review-hint">Pending changes are highlighted amber until approved.</span>
         </div>
       </div>
 

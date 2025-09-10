@@ -21,27 +21,35 @@ let changeLog: ChangeLogEntry[] = loadChangeLog();
 
 const STANDALONE_KEY = 'pp_standalone_docs';
 const OVERRIDES_KEY  = 'pp_doc_overrides';
-const CONFIRMED_KEYS_KEY = 'pp_confirmed_keys';
-const PENDING_KEYS_KEY   = 'pp_pending_keys';
+const CONFIRM_KEY    = 'pp_doc_confirm';
 
 type DocOverrides = Record<DocKey, Partial<TokenMap>>;
-type StringArrayMap = Record<DocKey, string[]>;
+type ConfirmMap   = Record<DocKey, boolean>;
 
-const loadJSON = <T>(k: string, fallback: T): T => {
-  try { return JSON.parse(localStorage.getItem(k) || '') as T; }
-  catch { return fallback; }
+const loadStandalone = (): Set<DocKey> => {
+  try { return new Set(JSON.parse(localStorage.getItem(STANDALONE_KEY) || '[]')); }
+  catch { return new Set(); }
 };
-const saveJSON = (k: string, v: any) => localStorage.setItem(k, JSON.stringify(v));
+const saveStandalone = (s: Set<DocKey>) =>
+  localStorage.setItem(STANDALONE_KEY, JSON.stringify([...s]));
 
-let standaloneDocs = new Set<string>(loadJSON<string[]>(STANDALONE_KEY, []));
-let docOverrides: DocOverrides = loadJSON<DocOverrides>(OVERRIDES_KEY, {});
-let confirmedKeysByDoc: StringArrayMap = loadJSON<StringArrayMap>(CONFIRMED_KEYS_KEY, {});
-let pendingKeysByDoc  : StringArrayMap = loadJSON<StringArrayMap>(PENDING_KEYS_KEY, {});
+const loadOverrides = (): DocOverrides => {
+  try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') as DocOverrides; }
+  catch { return {}; }
+};
+const saveOverrides = () =>
+  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(docOverrides));
 
-const saveStandalone = () => saveJSON(STANDALONE_KEY, [...standaloneDocs]);
-const saveOverrides  = () => saveJSON(OVERRIDES_KEY, docOverrides);
-const saveConfirmed  = () => saveJSON(CONFIRMED_KEYS_KEY, confirmedKeysByDoc);
-const savePending    = () => saveJSON(PENDING_KEYS_KEY,   pendingKeysByDoc);
+const loadConfirmMap = (): ConfirmMap => {
+  try { return JSON.parse(localStorage.getItem(CONFIRM_KEY) || '{}') as ConfirmMap; }
+  catch { return {}; }
+};
+const saveConfirmMap = () =>
+  localStorage.setItem(CONFIRM_KEY, JSON.stringify(confirmMap));
+
+let standaloneDocs = loadStandalone();
+let docOverrides: DocOverrides = loadOverrides();
+let confirmMap: ConfirmMap = loadConfirmMap();
 
 let currentSegment: string | null = null;
 let currentPolicy : string | null = null;
@@ -51,12 +59,7 @@ const keyFor = (segment: string, policy: string): DocKey => `${segment}::${polic
 const getEffectiveMap = (docKey: DocKey | null): TokenMap =>
   ({ ...(tokenMap || {}), ...(docKey ? (docOverrides[docKey] || {}) : {}) } as TokenMap);
 
-const getConfirmedSet = (docKey: DocKey | null) => new Set<string>(docKey ? (confirmedKeysByDoc[docKey] || []) : []);
-const getPendingSet   = (docKey: DocKey | null) => new Set<string>(docKey ? (pendingKeysByDoc[docKey] || []) : []);
-const setConfirmedSet = (docKey: DocKey, s: Set<string>) => { confirmedKeysByDoc[docKey] = [...s]; saveConfirmed(); };
-const setPendingSet   = (docKey: DocKey, s: Set<string>) => { pendingKeysByDoc[docKey]   = [...s]; savePending(); };
-
-/* ----------------- Data (policy catalog) ----------------- */
+/* ----------------- Data ----------------- */
 
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
@@ -117,11 +120,10 @@ const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
 
-/* Optional doc manager elements (guarded) */
-const manageDocsBtn = document.getElementById('manageDocs');
-const docMgrMenu    = document.getElementById('docMgrMenu');
-const docMgrClose   = document.getElementById('docMgrClose');
-const docMgrList    = document.getElementById('docMgrList');
+const manageDocsBtn = document.getElementById('manageDocs')!;
+const docMgrMenu    = document.getElementById('docMgrMenu')!;
+const docMgrClose   = document.getElementById('docMgrClose')!;
+const docMgrList    = document.getElementById('docMgrList')!;
 
 const searchContainer = document.getElementById('searchContainer')!;
 const searchInput   = document.getElementById('semanticSearch') as HTMLInputElement;
@@ -137,20 +139,18 @@ const adminPopup    = document.getElementById('adminPopup')!;      // Right draw
 const updatesDrawer = document.getElementById('updatesDrawer')!;   // Left drawer
 const drawerScrim   = document.getElementById('drawerScrim')!;
 
-/* Context fields */
+/* Doc confirm row */
+const docConfirmRow = document.getElementById('docConfirmRow')!;
+const docConfirmTog = document.getElementById('docConfirmTog') as HTMLInputElement;
+
 const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement;
 const orgInput      = document.getElementById('orgInput') as HTMLInputElement;
 const personInput   = document.getElementById('personInput') as HTMLInputElement;
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
 const saveTokensBtn = document.getElementById('saveTokensBtn')!;
 
-/* Updates */
 const updateTabBtn  = document.getElementById('updatesToggle')!;
 const updatesContent= document.getElementById('updatesContent')!;
-
-/* Doc footer (confirm pending -> green) */
-const docFooter     = document.getElementById('docFooter')!;
-const confirmBox    = document.getElementById('confirmChanges') as HTMLInputElement;
 
 const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
 
@@ -195,14 +195,42 @@ logoutBtn.addEventListener('click', () => {
   currentUsername = null;
 });
 
+/* ----------------- Admin dropdown (robust open/close) ----------------- */
+
+// prevent outside-click handler from closing immediately
+adminBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const willShow = adminMenu.style.display !== 'block';
+  adminMenu.style.display = willShow ? 'block' : 'none';
+  if (willShow) {
+    // keep submenu hidden until requested
+    docMgrMenu.classList.remove('show');
+
+    // ensure it stays on-screen (open to the left if needed)
+    const rect = adminMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      (adminMenu as HTMLElement).style.right = '0';
+      (adminMenu as HTMLElement).style.left  = 'auto';
+    }
+  }
+});
+adminMenu.addEventListener('click', (e) => e.stopPropagation());
+docMgrMenu.addEventListener('click', (e) => e.stopPropagation());
+
+// close when clicking outside
+document.addEventListener('click', () => {
+  docMgrMenu.classList.remove('show');
+  adminMenu.style.display = 'none';
+});
+
 /* ----------------- Drawers ----------------- */
 
 const closeAllDrawers = () => {
   adminPopup.classList.remove('open');
   updatesDrawer.classList.remove('open');
   drawerScrim.classList.remove('show');
+  updatesContent.classList.add('hidden');
 };
-
 const openContextDrawer = () => {
   adminMenu.style.display = 'none';
   orgInput.value      = tokenMap.organisation_name;
@@ -212,23 +240,18 @@ const openContextDrawer = () => {
   adminPopup.classList.add('open');
   drawerScrim.classList.add('show');
 };
-
 const openUpdatesDrawer = () => {
+  updatesContent.classList.remove('hidden');
   updatesDrawer.classList.add('open');
   drawerScrim.classList.add('show');
 };
 
-adminBtn.addEventListener('click', () => {
-  const show = adminMenu.style.display !== 'block';
-  adminMenu.style.display = show ? 'block' : 'none';
-  if (!show) hideDocMgr();
-});
 ctxSettings.addEventListener('click', openContextDrawer);
 openContextBtn.addEventListener('click', openContextDrawer);
 updateTabBtn.addEventListener('click', openUpdatesDrawer);
 
-drawerScrim.addEventListener('click', () => { closeAllDrawers(); adminMenu.style.display = 'none'; hideDocMgr(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); adminMenu.style.display = 'none'; hideDocMgr(); } });
+drawerScrim.addEventListener('click', closeAllDrawers);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); adminMenu.style.display = 'none'; } });
 
 /* ----------------- Admin menu items ----------------- */
 
@@ -242,6 +265,12 @@ demoReset.addEventListener('click', () => {
   saveChangeLog(changeLog);
   changeLogContent.innerHTML = '<p>No changes yet.</p>';
   updatesContent.innerHTML = '<p>No updates for this document.</p>';
+  updatesContent.classList.add('hidden');
+});
+
+toggleSearchBar.addEventListener('click', () => {
+  searchContainer.classList.toggle('hidden');
+  adminMenu.style.display = 'none';
 });
 
 /* ----------------- Save contextual settings ----------------- */
@@ -276,6 +305,9 @@ saveTokensBtn.addEventListener('click', () => {
 
   updateLastUpdated();
   closeAllDrawers();
+
+  // re-apply confirm styling (if this doc is open and confirmed)
+  if (currentDocKey) applyConfirmToTokens(currentDocKey, !!confirmMap[currentDocKey]);
 });
 
 /* ----------------- Change log modal ----------------- */
@@ -300,21 +332,6 @@ function resolveSegmentKey(name: string): string {
   const norm = (s: string) => s.toLowerCase().trim();
   const match = Object.keys(policiesDataLocal).find(k => norm(k) === norm(name));
   return match || name;
-}
-
-function renderDoc(segmentName: string, policy: string) {
-  currentSegment = segmentName;
-  currentPolicy  = policy;
-  currentDocKey  = keyFor(segmentName, policy);
-
-  const eff = getEffectiveMap(currentDocKey);
-  const confirmed = getConfirmedSet(currentDocKey);
-  const pending   = getPendingSet(currentDocKey);
-
-  const docEl = document.getElementById('docContent');
-  if (docEl) docEl.textContent = 'Loading…';
-  loadAndRender(segmentName, policy, eff, changeLog, { confirmed, pending })
-    .then(() => updateConfirmUI());
 }
 
 function selectSegment(segmentOrKey: string, evt: Event) {
@@ -349,59 +366,42 @@ function selectSegment(segmentOrKey: string, evt: Event) {
         if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
         return;
       }
-      renderDoc(segmentName, policy);
+      currentSegment = segmentName;
+      currentPolicy  = policy;
+      currentDocKey  = keyFor(segmentName, policy);
+
+      const eff = getEffectiveMap(currentDocKey);
+      const p = loadAndRender(segmentName, policy, eff, changeLog);
+      Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
     },
     color
   );
 
-  // initial
   let initial = policies[0];
   if (policyId) {
     const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
     if (m) initial = m;
   }
-  if (initial && !/^2\.\d+\s+Placeholder$/i.test(initial)) {
-    renderDoc(segmentName, initial);
-  } else {
-    const docEl = document.getElementById('docContent');
+
+  const docEl = document.getElementById('docContent');
+  const isPlaceholder = initial ? /^2\.\d+\s+Placeholder$/i.test(initial) : false;
+  if (!initial || isPlaceholder) {
     if (docEl) docEl.textContent = 'Select a policy';
+    return;
   }
+
+  currentSegment = segmentName;
+  currentPolicy  = initial;
+  currentDocKey  = keyFor(segmentName, initial);
+  if (docEl) docEl.textContent = 'Loading…';
+  const eff = getEffectiveMap(currentDocKey);
+  const p = loadAndRender(segmentName, initial, eff, changeLog);
+  Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
 }
 
 drawWheel(svgWheel, selectSegment);
 
 /* ----------------- Inline token editing ----------------- */
-
-function pushChangeLog(field: TokenKey, oldValue: string, newValue: string) {
-  const entry: ChangeLogEntry = {
-    field,
-    oldValue,
-    newValue,
-    user: currentUsername || 'unknown',
-    timestamp: new Date().toISOString()
-  };
-  changeLog.push(entry);
-  saveChangeLog(changeLog);
-}
-
-function markAllOccurrences(key: string, classToAdd: string, classToRemove?: string) {
-  document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
-    if (classToRemove) span.classList.remove(classToRemove);
-    span.classList.add(classToAdd);
-  });
-}
-
-function updateConfirmUI() {
-  if (!currentDocKey) { docFooter.classList.add('hidden'); return; }
-  const pending = getPendingSet(currentDocKey);
-  if (pending.size > 0) {
-    docFooter.classList.remove('hidden');
-    if (confirmBox) confirmBox.checked = false;
-  } else {
-    docFooter.classList.add('hidden');
-    if (confirmBox) confirmBox.checked = false;
-  }
-}
 
 function enableInlineTokenEditing() {
   const root = document.getElementById('docContent');
@@ -423,7 +423,7 @@ function enableInlineTokenEditing() {
     const key   = el.dataset.key as TokenKey;
     const typed = (el.textContent || '').trim();
 
-    // Decide where to save: per-doc if standalone, else global
+    // Save per-doc if standalone, else global
     if (standaloneDocs.has(currentDocKey)) {
       const ov = (docOverrides[currentDocKey] ||= {});
       const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
@@ -440,42 +440,27 @@ function enableInlineTokenEditing() {
 
     updateLastUpdatedUI(tokenMap);
 
-    // Mark as PENDING (amber) for this document
-    const pend = getPendingSet(currentDocKey);
-    pend.add(key as string);
-    setPendingSet(currentDocKey, pend);
-
-    // UI: amber now; remove green if present
-    markAllOccurrences(key as string, 'token-pending', 'token-saved');
-
-    updateConfirmUI();
+    // mark this key as saved (green) immediately
+    document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
+      if (span !== el) span.textContent = typed;
+      span.classList.add('token-saved');
+    });
   });
 }
 
-/* Confirm pending -> saved (amber -> green) */
-if (confirmBox) {
-  confirmBox.addEventListener('change', () => {
-    if (!currentDocKey) return;
-    if (!confirmBox.checked) return; // only act on check
-
-    const pend = getPendingSet(currentDocKey);
-    if (pend.size === 0) { confirmBox.checked = false; return; }
-
-    const conf = getConfirmedSet(currentDocKey);
-    pend.forEach(k => conf.add(k));
-    setConfirmedSet(currentDocKey, conf);
-    setPendingSet(currentDocKey, new Set<string>()); // clear all pending
-
-    // UI: switch amber -> green
-    pend.forEach(k => markAllOccurrences(k, 'token-saved', 'token-pending'));
-
-    // reset checkbox and footer visibility
-    confirmBox.checked = false;
-    updateConfirmUI();
-  });
+function pushChangeLog(field: TokenKey, oldValue: string, newValue: string) {
+  const entry: ChangeLogEntry = {
+    field,
+    oldValue,
+    newValue,
+    user: currentUsername || 'unknown',
+    timestamp: new Date().toISOString()
+  };
+  changeLog.push(entry);
+  saveChangeLog(changeLog);
 }
 
-/* ----------------- Document Manager (nested drop-down) ----------------- */
+/* ----------------- Document Manager submenu ----------------- */
 
 function buildDocMgrMenu() {
   if (!docMgrList) return;
@@ -518,12 +503,14 @@ function buildDocMgrMenu() {
           delete docOverrides[docKey];
         }
         tag.textContent = checked ? 'Standalone' : 'Grouped';
-        saveStandalone();
+        saveStandalone(standaloneDocs);
         saveOverrides();
 
-        // re-render effective map
+        // if the current doc was toggled, re-render with new effective map
         if (currentDocKey === docKey && currentSegment && currentPolicy) {
-          renderDoc(currentSegment, currentPolicy);
+          const eff = getEffectiveMap(currentDocKey);
+          const p = loadAndRender(currentSegment, currentPolicy, eff, changeLog);
+          Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
         }
       });
 
@@ -538,31 +525,51 @@ function buildDocMgrMenu() {
 }
 
 function showDocMgr() {
-  if (!manageDocsBtn || !docMgrMenu) return;
   const top = (manageDocsBtn as HTMLElement).offsetTop;
   (docMgrMenu as HTMLElement).style.top = `${top}px`;
   buildDocMgrMenu();
   docMgrMenu.classList.add('show');
 }
-function hideDocMgr() {
-  if (!docMgrMenu) return;
-  docMgrMenu.classList.remove('show');
+function hideDocMgr() { docMgrMenu.classList.remove('show'); }
+
+manageDocsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = !docMgrMenu.classList.contains('show');
+  if (open) showDocMgr(); else hideDocMgr();
+});
+docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
+
+/* ----------------- Confirm row behaviour ----------------- */
+
+function setConfirmUIForCurrentDoc() {
+  if (!currentDocKey) return;
+
+  const hasTokens = !!document.querySelector('#docContent .token-edit');
+  if (hasTokens) {
+    docConfirmRow.classList.remove('hidden');
+  } else {
+    docConfirmRow.classList.add('hidden');
+  }
+
+  const checked = !!confirmMap[currentDocKey];
+  docConfirmTog.checked = checked;
+  applyConfirmToTokens(currentDocKey, checked);
 }
 
-if (manageDocsBtn) {
-  manageDocsBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!docMgrMenu) return;
-    const open = !docMgrMenu.classList.contains('show');
-    if (open) showDocMgr(); else hideDocMgr();
+function applyConfirmToTokens(docKey: DocKey, confirmed: boolean) {
+  const tokens = document.querySelectorAll<HTMLElement>('#docContent .token-edit');
+  tokens.forEach(t => {
+    if (confirmed) t.classList.add('token-saved');
+    else           t.classList.remove('token-saved');
   });
 }
-if (docMgrClose) {
-  docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
-}
-document.addEventListener('click', (e) => {
-  const inside = (e.target as Node) && (adminMenu.contains(e.target as Node) || (docMgrMenu?.contains(e.target as Node) ?? false));
-  if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
+
+// toggle handler
+docConfirmTog.addEventListener('change', () => {
+  if (!currentDocKey) return;
+  confirmMap[currentDocKey] = !!docConfirmTog.checked;
+  saveConfirmMap();
+  applyConfirmToTokens(currentDocKey, !!docConfirmTog.checked);
 });
 
 /* ----------------- Search ----------------- */
@@ -580,7 +587,12 @@ searchBtn.addEventListener('click', () => {
       div.innerHTML = `<strong>${doc.title}</strong><br><button style="margin-top:5px;">View Document</button>`;
       const btn = div.querySelector('button')!;
       btn.addEventListener('click', () => {
-        renderDoc(doc.segment, doc.policy);
+        currentSegment = doc.segment;
+        currentPolicy  = doc.policy;
+        currentDocKey  = keyFor(doc.segment, doc.policy);
+        const eff = getEffectiveMap(currentDocKey);
+        const p = loadAndRender(doc.segment, doc.policy, eff, changeLog);
+        Promise.resolve(p).then(() => setConfirmUIForCurrentDoc());
       });
       resultsContent.appendChild(div);
     }
