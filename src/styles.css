@@ -15,12 +15,6 @@ body {
 .error { color: red; }
 .muted { color:#666; }
 
-/* Auth */
-.login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
-.login-box { background:#fff; padding:2rem; border-radius:8px; width:300px; box-shadow:0 8px 24px rgba(0,0,0,.1); }
-.login-box input, .login-box button { width:100%; padding:.5rem; margin-bottom:1rem; border-radius:4px; border:1px solid #ccc; }
-.toggle-password { text-align:right; cursor:pointer; color:#007bff; margin:-.5rem 0 1rem; }
-
 /* App shell */
 .main-app { display:flex; flex-direction:column; min-height:100vh; width:100%; align-items:stretch; }
 
@@ -69,8 +63,8 @@ body {
   display:none; z-index:1001; padding:.35rem 0;
 }
 .dropdown-sub.show{ display:block; }
-
-/* Simple structure inside the submenu */
+.docmgr-head{ display:flex; align-items:center; justify-content:space-between; padding:.4rem .8rem; border-bottom:1px solid #eee; }
+.docmgr-list{ padding:.25rem 0; }
 .dm-section{ padding:.25rem 0; border-top:1px solid #eee; }
 .dm-section:first-child{ border-top:0; }
 .dm-seg{ font-weight:600; padding:.5rem 1rem; color:#222; }
@@ -132,9 +126,6 @@ body {
 .side-drawer.left { left:0;  right:auto; transform: translateX(-100%); }
 .side-drawer.open { transform: translateX(0); }
 .side-drawer h3{ margin:0 0 .75rem; }
-.side-drawer label{ display:block; font-size:.9rem; margin:.75rem 0 .25rem; color:#333; }
-.side-drawer input{ width:100%; padding:.5rem .6rem; border:1px solid #ccc; border-radius:6px; }
-.side-drawer button{ margin-top:.5rem; }
 
 /* Scrim */
 .scrim{
@@ -143,36 +134,13 @@ body {
 }
 .scrim.show{ opacity:1; pointer-events:auto; }
 
-/* Scroll area */
-.scroll { max-height: calc(100vh - 80px); overflow-y: auto; }
-
-/* Wheel visuals */
-#policy-wheel .seg { transition: filter .18s ease, stroke-width .18s ease, transform .18s ease; }
-#policy-wheel .seg:hover  { filter: brightness(1.06) saturate(1.02); }
-#policy-wheel .seg.active { stroke-width:2.25; filter: drop-shadow(0 0 6px rgba(0,0,0,.24)); }
-#policy-wheel .arc-label {
-  font:600 10px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  fill:#fff; paint-order:stroke; stroke:rgba(0,0,0,.28); stroke-width:.9px; letter-spacing:.1px; text-anchor:middle;
-}
-#policy-wheel .center-label {
-  font:700 12px/1.15 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  fill:#fff; text-anchor:middle; dominant-baseline:middle; text-shadow:0 1px 0 rgba(0,0,0,.16);
-}
-#policy-wheel .badge { fill:#fff; stroke:rgba(0,0,0,.12); stroke-width:1; }
-#policy-wheel .badge-text {
-  font:700 8.5px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  fill:#333; text-anchor:middle; dominant-baseline:central;
-}
-#policy-wheel .separator { stroke:#fff; stroke-width:6; stroke-linecap:round; }
-#policy-wheel .corner-tri { stroke-width:1; }
-
-/* ---------- Inline token editor ---------- */
+/* Content */
 #docContent { line-height: 1.6; }
 
-/* Base: red (unconfirmed/never edited) */
+/* Inline token editor states */
 .token-edit {
   display: inline;
-  background: #fde8e8;
+  background: #fde8e8;           /* red (unreviewed) */
   border-radius: 3px;
   padding: 0 .15em;
   margin-left: .12em;
@@ -180,18 +148,15 @@ body {
   outline: 1px dashed rgba(185, 28, 28, .35);
   cursor: text;
 }
-.token-edit:focus {
-  outline: 2px solid var(--blue);
-  background: #ffecec;
-}
+.token-edit:focus { outline: 2px solid var(--blue); background: #ffecec; }
 
 /* Amber while there are pending edits on this doc */
 .token-edit.token-pending {
-  background: #fff3cd;                 /* Bootstrap-ish warning */
+  background: #fff3cd;
   outline-color: rgba(245, 158, 11, .5);
 }
 
-/* Green when the change is confirmed */
+/* Green when the change is reviewed */
 .token-edit.token-saved {
   background: #e7f6e7;
   outline-color: rgba(16,185,129,.45);
@@ -200,11 +165,10 @@ body {
 /* Doc footer (confirm changes) */
 .doc-footer{
   margin-top: 12px;
-  display:flex; align-items:center; justify-content:flex-end;
+  display:flex; align-items:center; justify-content:flex-end; gap: 1rem;
+  padding-top:.25rem;
 }
-.confirm-changes{
-  font-size:.95rem; color:#333; user-select:none;
-}
+.confirm-changes{ font-size:.95rem; color:#333; user-select:none; }
 .confirm-changes input{ margin-right:.45rem; }
 
 /* Responsive */

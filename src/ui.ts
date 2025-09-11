@@ -2,8 +2,6 @@
 import type { ChangeLogEntry, TokenMap } from './types';
 import { filenameFor, fetchDocumentHtml } from './api';
 
-/* ----------------- Small UI helpers ----------------- */
-
 export function updateLastUpdatedUI(tokenMap: TokenMap) {
   const el = document.getElementById('updateBox');
   if (!el) return;
@@ -12,16 +10,18 @@ export function updateLastUpdatedUI(tokenMap: TokenMap) {
     : 'Last updated: Never';
 }
 
+// Helpers
 const stripNumberPrefix = (s: string) => s.replace(/^\s*\d+(?:\.\d+)*\s+/, '');
 const possessive = (s: string) => (!s ? '' : /s$/i.test(s) ? s + "'" : s + "'s");
 
+// Canonicalise token keys and support aliases (case-insensitive)
 export function canonicalKey(k: string): string {
   const kk = (k || '').toLowerCase().trim();
   if (kk === 'organisational' || kk === 'organizational') return 'organisation_name';
   if (kk === 'organisation'   || kk === 'organization')   return 'organisation_name';
   if (kk === 'organisation_name' || kk === 'organization_name' || kk === 'org' || kk === 'org_name')
     return 'organisation_name';
-  if (kk === 'organisation_short' || kk === 'org_short') return 'organisation_short';
+  if (kk === 'organisation_short' || kk === 'org_short')   return 'organisation_short';
   if (kk === 'resident' || kk === 'resident_name' || kk === 'consumer') return 'person';
   if (kk === 'person' || kk === 'persons') return 'person';
   if (kk === 'service' || kk === 'service-type' || kk === 'service_type') return 'service_type';
@@ -34,16 +34,15 @@ function escHtml(s: string): string {
   );
 }
 
-function tokenSpan(key: string, value: string, savedKeys?: Set<string>): string {
+// Build an editable span. If this key is in reviewedKeys, start in "green".
+function tokenSpan(key: string, value: string, reviewedKeys?: Set<string>): string {
   const k = canonicalKey(key);
-  const savedCls = savedKeys && savedKeys.has(k) ? ' token-saved' : '';
-  // NOTE: class 'token-edit' is what main.ts listens for (input->pending, confirm->saved)
-  return `<span class="token-edit${savedCls}" data-key="${k}" contenteditable="true" spellcheck="false">${escHtml(
+  const reviewed = reviewedKeys?.has(k);
+  const cls = reviewed ? 'token-edit token-saved' : 'token-edit';
+  return `<span class="${cls}" data-key="${k}" contenteditable="true" spellcheck="false">${escHtml(
     value ?? ''
   )}</span>`;
 }
-
-/* ----------------- Public render helpers ----------------- */
 
 export function renderPolicies(
   _segmentName: string,
@@ -110,89 +109,65 @@ export function buildUpdatesPanel(html: string, changeLog: ChangeLogEntry[]) {
   upEl.innerHTML = `<ul class="updates-list">${items}</ul>`;
 }
 
-/** Replacement with aliases, possessives, and simple “123/123s/123’s” mapping; returns HTML. */
+/** Replacement with aliases, possessives, and simple “123/123s/123’s” mapping */
 export function replaceTokens(
   html: string,
   tokenMap: TokenMap,
-  savedKeys?: Set<string>
+  reviewedKeys?: Set<string>
 ) {
   const get = (key: string) => (tokenMap as any)[key];
   let out = html;
 
-  // Handle 123 placeholders used in some docs (mapped to 'person')
+  // Handle 123 placeholders used in some docs -> person
   const p = String(get('person') || '');
-  out = out.replace(/\b123['’]s\b/g, tokenSpan('person', possessive(p), savedKeys));
-  out = out.replace(/\b123s\b/g, tokenSpan('person', p ? (p.endsWith('s') ? p : p + 's') : '', savedKeys));
-  out = out.replace(/\b123\b/g, tokenSpan('person', p, savedKeys));
+  out = out.replace(/\b123['’]s\b/g, tokenSpan('person', possessive(p), reviewedKeys));
+  out = out.replace(/\b123s\b/g, tokenSpan('person', p ? (p.endsWith('s') ? p : p + 's') : '', reviewedKeys));
+  out = out.replace(/\b123\b/g, tokenSpan('person', p, reviewedKeys));
 
-  // Possessive bracket tokens: [key's] or [key’s]
+  // [key's] or [key’s]
   out = out.replace(/\[\s*([\w_]+)\s*['’]s\s*\]/gi, (_m, k: string) => {
     const kk = canonicalKey(k);
     const v = get(kk);
-    return tokenSpan(kk, v ? possessive(String(v)) : `[${k}'s]`, savedKeys);
+    return tokenSpan(kk, v ? possessive(String(v)) : `[${k}'s]`, reviewedKeys);
   });
 
-  // Non-possessive bracket tokens: [Organisational], [resident], etc.
+  // [key]
   out = out.replace(/\[\s*([\w_]+)\s*\]/gi, (_m, k: string) => {
     const kk = canonicalKey(k);
     const v = get(kk);
-    return tokenSpan(kk, (v ?? `[${k}]`) as string, savedKeys);
+    return tokenSpan(kk, (v ?? `[${k}]`) as string, reviewedKeys);
   });
 
-  // Curly tokens: {{ organisation_name }}, etc.
+  // {{ key }}
   out = out.replace(/\{\{\s*([\w_]+)\s*\}\}/gi, (_m, k: string) => {
     const kk = canonicalKey(k);
     const v = get(kk);
-    return tokenSpan(kk, (v ?? `{{${k}}}`) as string, savedKeys);
+    return tokenSpan(kk, (v ?? `{{${k}}}`) as string, reviewedKeys);
   });
 
   return out;
 }
 
-/* Footer with confirm toggle (appended to every rendered document) */
-function makeConfirmFooter(): HTMLElement {
-  const footer = document.createElement('div');
-  footer.className = 'doc-footer';
-  footer.innerHTML = `
-    <label class="confirm-changes">
-      <input type="checkbox" id="confirmBox" />
-      Confirm changes (turn amber to green)
-    </label>`;
-  return footer;
-}
-
-/** Fetch document, tokenise, render, updates panel, then notify main.ts via a custom event. */
 export async function loadAndRender(
   segment: string,
   policy: string,
   tokenMap: TokenMap,
-  changeLog: ChangeLogEntry[]
+  changeLog: ChangeLogEntry[],
+  reviewedKeys?: Set<string>
 ) {
   const docEl = document.getElementById('docContent');
   if (docEl) docEl.textContent = 'Loading…';
-
   try {
     const fileName = filenameFor(segment, policy);
     const html = await fetchDocumentHtml(fileName);
 
-    // Tokens that have been changed at least once (stay green on first render)
-    const savedKeys = new Set<string>((changeLog || []).map(e => canonicalKey(String(e.field || ''))));
-
-    const tokenised = replaceTokens(html, tokenMap, savedKeys);
-
-    if (docEl) {
-      docEl.innerHTML = tokenised;
-      docEl.appendChild(makeConfirmFooter());
-    }
+    const tokenised = replaceTokens(html, tokenMap, reviewedKeys);
+    if (docEl) docEl.innerHTML = tokenised;
 
     buildUpdatesPanel(html, changeLog);
-
-    // Let main.ts hook events AFTER the content is in the DOM
-    window.dispatchEvent(new CustomEvent('pp:doc-rendered'));
   } catch (err: any) {
-    if (docEl) docEl.innerHTML = `<p>Error loading document: ${escHtml(err?.message || String(err))}</p>`;
+    if (docEl) docEl.innerHTML = `<p>Error loading document: ${String(err?.message || err)}</p>`;
     const upEl = document.getElementById('updatesContent');
-    if (upEl) upEl.innerHTML = '<p class="muted">No updates for this document.</p>';
-    window.dispatchEvent(new CustomEvent('pp:doc-rendered')); // still allow main to clear handlers
+    if (upEl) { upEl.innerHTML = '<p class="muted">No updates for this document.</p>'; }
   }
 }
