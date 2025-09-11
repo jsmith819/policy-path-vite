@@ -3,13 +3,13 @@ import type { ChangeLogEntry, TokenMap } from './types';
 import { loadTokenMap, saveTokenMap, loadChangeLog, saveChangeLog } from './store';
 import { checkLogin } from './auth';
 import { drawWheel } from './wheel';
-import { loadAndRender, renderPolicies, updateLastUpdatedUI } from './ui';
+import { loadAndRender, renderPolicies, updateLastUpdatedUI, canonicalKey } from './ui';
 import { indexDocuments, search as searchDocs } from './search';
 
-/* ----------------- Globals & helpers ----------------- */
+/* ----------------- Global state ----------------- */
 
-type TokenKey = keyof TokenMap;
 type DocKey = string;
+type TokenKey = keyof TokenMap;
 
 let currentUserRole: 'admin' | 'user' | null = null;
 let currentUsername: string | null = null;
@@ -17,11 +17,9 @@ let currentUsername: string | null = null;
 let tokenMap: TokenMap = loadTokenMap();
 let changeLog: ChangeLogEntry[] = loadChangeLog();
 
-(Object.assign(window as any, { tokenMap, changeLog }));
-
+// For per-document overrides & standalone grouping
 const STANDALONE_KEY = 'pp_standalone_docs';
 const OVERRIDES_KEY  = 'pp_doc_overrides';
-
 type DocOverrides = Record<DocKey, Partial<TokenMap>>;
 
 const loadStandalone = (): Set<DocKey> => {
@@ -31,12 +29,13 @@ const loadStandalone = (): Set<DocKey> => {
 const saveStandalone = (s: Set<DocKey>) => {
   localStorage.setItem(STANDALONE_KEY, JSON.stringify([...s]));
 };
+
 const loadOverrides = (): DocOverrides => {
   try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') as DocOverrides; }
   catch { return {}; }
 };
-const saveOverrides = () => {
-  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(docOverrides));
+const persistOverrides = (m: DocOverrides) => {
+  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(m));
 };
 
 let standaloneDocs = loadStandalone();
@@ -44,13 +43,17 @@ let docOverrides: DocOverrides = loadOverrides();
 
 let currentSegment: string | null = null;
 let currentPolicy : string | null = null;
-let currentDocKey : DocKey | null = null;
+let currentDocKey : DocKey   | null = null;
 
+// token values used for rendering (global + per-doc override)
 const keyFor = (segment: string, policy: string): DocKey => `${segment}::${policy}`;
 const getEffectiveMap = (docKey: DocKey | null): TokenMap =>
   ({ ...(tokenMap || {}), ...(docKey ? (docOverrides[docKey] || {}) : {}) } as TokenMap);
 
-/* ----------------- Data (policy catalog) ----------------- */
+// keys edited since last render (amber) waiting for confirmation
+let pendingKeys = new Set<string>();
+
+/* ----------------- Policy catalogue ----------------- */
 
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
@@ -111,7 +114,7 @@ const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
 
-/* NEW: Manage docs submenu */
+// Manage Documents submenu
 const manageDocsBtn = document.getElementById('manageDocs')!;
 const docMgrMenu    = document.getElementById('docMgrMenu')!;
 const docMgrClose   = document.getElementById('docMgrClose')!;
@@ -126,7 +129,6 @@ const closeResultsBtn = document.getElementById('closeResultsBtn')!;
 
 const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGSVGElement;
 
-/* Drawers */
 const adminPopup    = document.getElementById('adminPopup')!;      // Right drawer
 const updatesDrawer = document.getElementById('updatesDrawer')!;   // Left drawer
 const drawerScrim   = document.getElementById('drawerScrim')!;
@@ -138,22 +140,20 @@ const serviceInput  = document.getElementById('serviceInput') as HTMLInputElemen
 const saveTokensBtn = document.getElementById('saveTokensBtn')!;
 
 const updateTabBtn  = document.getElementById('updatesToggle')!;
-const updatesContent= document.getElementById('updatesContent')!;
-
-const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
+const openContextBtn= document.getElementById('openContextBtn') as HTMLButtonElement;
 
 const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
 const closeTrackBtn = document.getElementById('closeTrack')!;
 
-/* ----------------- Permissions & UI bits ----------------- */
+/* ----------------- Permissions & small UI ----------------- */
 
 function applyPermissions() {
   document.querySelectorAll('#adminMenu li.admin-only').forEach(li => {
     (li as HTMLElement).style.display = (currentUserRole === 'admin') ? 'block' : 'none';
   });
 }
-function updateLastUpdated() { updateLastUpdatedUI(tokenMap); }
+function refreshLastUpdated() { updateLastUpdatedUI(tokenMap); }
 
 /* ----------------- Auth ----------------- */
 
@@ -166,7 +166,7 @@ loginBtn.addEventListener('click', () => {
     loginScreenEl.classList.add('hidden');
     mainAppEl.classList.remove('hidden');
     applyPermissions();
-    updateLastUpdated();
+    refreshLastUpdated();
   } else {
     loginErrorEl.classList.remove('hidden');
   }
@@ -189,38 +189,41 @@ const closeAllDrawers = () => {
   adminPopup.classList.remove('open');
   updatesDrawer.classList.remove('open');
   drawerScrim.classList.remove('show');
-  // keep the list hidden until the drawer is reopened
-  updatesContent.classList.add('hidden');
 };
 
 const openContextDrawer = () => {
   adminMenu.style.display = 'none';
-  orgInput.value      = tokenMap.organisation_name;
+  orgInput.value      = tokenMap.organisation_name || '';
   (orgShortInput as HTMLInputElement).value = (tokenMap as any).organisation_short || '';
-  personInput.value   = tokenMap.person;
-  serviceInput.value  = tokenMap.service_type;
+  personInput.value   = tokenMap.person || '';
+  serviceInput.value  = tokenMap.service_type || '';
   adminPopup.classList.add('open');
   drawerScrim.classList.add('show');
 };
-
 const openUpdatesDrawer = () => {
-  // reveal the content list when opening the drawer
-  updatesContent.classList.remove('hidden');
   updatesDrawer.classList.add('open');
   drawerScrim.classList.add('show');
 };
 
-adminBtn.addEventListener('click', () => {
+adminBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
   const show = adminMenu.style.display !== 'block';
   adminMenu.style.display = show ? 'block' : 'none';
   if (!show) hideDocMgr();
 });
+document.addEventListener('click', (e) => {
+  if (!adminMenu.contains(e.target as Node) && e.target !== adminBtn) {
+    adminMenu.style.display = 'none';
+    hideDocMgr();
+  }
+});
+
 ctxSettings.addEventListener('click', openContextDrawer);
 openContextBtn.addEventListener('click', openContextDrawer);
 updateTabBtn.addEventListener('click', openUpdatesDrawer);
 
-drawerScrim.addEventListener('click', () => { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; } });
+drawerScrim.addEventListener('click', closeAllDrawers);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); adminMenu.style.display = 'none'; hideDocMgr(); } });
 
 /* ----------------- Admin menu items ----------------- */
 
@@ -233,8 +236,6 @@ demoReset.addEventListener('click', () => {
   changeLog = [];
   saveChangeLog(changeLog);
   changeLogContent.innerHTML = '<p>No changes yet.</p>';
-  updatesContent.innerHTML = '<p>No updates for this document.</p>';
-  updatesContent.classList.add('hidden');
 });
 
 toggleSearchBar.addEventListener('click', () => {
@@ -242,7 +243,7 @@ toggleSearchBar.addEventListener('click', () => {
   adminMenu.style.display = 'none';
 });
 
-/* ----------------- Save contextual settings ----------------- */
+/* ----------------- Save contextual settings (drawer) ----------------- */
 
 saveTokensBtn.addEventListener('click', () => {
   const oldMap = { ...tokenMap };
@@ -272,7 +273,7 @@ saveTokensBtn.addEventListener('click', () => {
   saveTokenMap(tokenMap);
   saveChangeLog(changeLog);
 
-  updateLastUpdated();
+  refreshLastUpdated();
   closeAllDrawers();
 });
 
@@ -289,191 +290,7 @@ trackChanges.addEventListener('click', () => {
 });
 closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).style.display = 'none'; });
 
-/* ----------------- Wheel + navigation ----------------- */
-
-const policiesDataLocal = policiesData;
-const policyColorsLocal = policyColors;
-
-function resolveSegmentKey(name: string): string {
-  const norm = (s: string) => s.toLowerCase().trim();
-  const match = Object.keys(policiesDataLocal).find(k => norm(k) === norm(name));
-  return match || name;
-}
-
-function selectSegment(segmentOrKey: string, evt: Event) {
-  const [incomingName, policyId] = segmentOrKey.split('::');
-  const segmentName = resolveSegmentKey(incomingName);
-
-  document.querySelectorAll('#policy-wheel path, #policy-wheel circle')
-    .forEach(el => el.classList.remove('active'));
-
-  const segEl = Array.from(document.querySelectorAll('#policy-wheel .seg'))
-    .find(el => (el as HTMLElement).getAttribute('data-name')?.toLowerCase() === incomingName.toLowerCase());
-  if (segEl) segEl.classList.add('active');
-  else (evt.currentTarget as Element)?.classList.add('active');
-
-  const policies = getPolicies(segmentName);
-  const color = policyColorsLocal[segmentName] || '#1c2b4a';
-
-  function getPolicies(segmentName: string): string[] {
-    const target = segmentName.toLowerCase();
-    for (const key of Object.keys(policiesDataLocal)) {
-      if (key.toLowerCase() === target) return policiesDataLocal[key];
-    }
-    return [];
-  }
-
-  renderPolicies(
-    segmentName,
-    policies,
-    (policy) => {
-      if (/^2\.\d+\s+Placeholder$/i.test(policy)) {
-        const docEl = document.getElementById('docContent');
-        if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
-        return;
-      }
-      // record current doc
-      currentSegment = segmentName;
-      currentPolicy  = policy;
-      currentDocKey  = keyFor(segmentName, policy);
-
-      // render with effective (global + per-doc) map
-      const eff = getEffectiveMap(currentDocKey);
-      loadAndRender(segmentName, policy, eff, changeLog).then(() => {
-        ensureDocFooter();            // ensure footer exists
-        wireDocFooterHandlers();      // make the checkbox work
-      });
-    },
-    color
-  );
-
-  let initial = policies[0];
-  if (policyId) {
-    const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
-    if (m) initial = m;
-  }
-
-  const docEl = document.getElementById('docContent');
-  const isPlaceholder = initial ? /^2\.\d+\s+Placeholder$/i.test(initial) : false;
-  if (!initial || isPlaceholder) {
-    if (docEl) docEl.textContent = 'Select a policy';
-    return;
-  }
-
-  // set & render first item too (when opening via wedge click, no pill click yet)
-  currentSegment = segmentName;
-  currentPolicy  = initial;
-  currentDocKey  = keyFor(segmentName, initial);
-  const eff = getEffectiveMap(currentDocKey);
-  if (docEl) docEl.textContent = 'Loading…';
-  loadAndRender(segmentName, initial, eff, changeLog).then(() => {
-    ensureDocFooter();
-    wireDocFooterHandlers();
-  });
-}
-
-drawWheel(svgWheel, selectSegment);
-
-/* ----------------- Inline token editing ----------------- */
-
-function pushChangeLog(field: TokenKey, oldValue: string, newValue: string) {
-  const entry: ChangeLogEntry = {
-    field,
-    oldValue,
-    newValue,
-    user: currentUsername || 'unknown',
-    timestamp: new Date().toISOString()
-  };
-  changeLog.push(entry);
-  saveChangeLog(changeLog);
-}
-
-function ensureDocFooter() {
-  const viewer = document.getElementById('docViewer');
-  if (!viewer) return;
-  let footer = viewer.querySelector('.doc-footer');
-  if (!footer) {
-    footer = document.createElement('div');
-    footer.className = 'doc-footer';
-    footer.innerHTML = `
-      <label class="confirm-changes">
-        <input type="checkbox" id="confirmDocChanges" />
-        Mark current changes as reviewed
-      </label>
-    `;
-    viewer.appendChild(footer);
-  } else {
-    const cb = footer.querySelector<HTMLInputElement>('#confirmDocChanges');
-    if (cb) cb.checked = false;
-  }
-}
-
-function wireDocFooterHandlers() {
-  const cb = document.getElementById('confirmDocChanges') as HTMLInputElement | null;
-  if (!cb) return;
-  cb.onchange = () => {
-    if (!cb.checked) return;
-    // turn all amber tokens to green
-    document.querySelectorAll<HTMLElement>('#docContent .token-edit.token-pending').forEach(el => {
-      el.classList.remove('token-pending');
-      el.classList.add('token-saved');
-    });
-  };
-}
-
-function enableInlineTokenEditing() {
-  const root = document.getElementById('docContent');
-  if (!root) return;
-
-  // plain-text paste only
-  root.addEventListener('paste', (e: any) => {
-    const t = (e.target as HTMLElement)?.closest('.token-edit');
-    if (!t) return;
-    e.preventDefault();
-    const text = e.clipboardData?.getData('text/plain') ?? '';
-    document.execCommand('insertText', false, text);
-  });
-
-  root.addEventListener('input', (e: any) => {
-    const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
-    if (!el || !currentDocKey) return;
-
-    const key   = el.dataset.key as TokenKey;
-    const typed = (el.textContent || '').trim();
-
-    // Decide where to save: per-doc if standalone, else global
-    if (standaloneDocs.has(currentDocKey)) {
-      const ov = (docOverrides[currentDocKey] ||= {});
-      const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
-      ov[key] = typed as any;
-      saveOverrides();
-
-      pushChangeLog(key, before, typed);
-    } else {
-      const before = String((tokenMap[key] ?? '') as any);
-      (tokenMap as any)[key] = typed;
-      tokenMap.updatedAt = new Date().toISOString();
-      saveTokenMap(tokenMap);
-
-      pushChangeLog(key, before, typed);
-    }
-
-    updateLastUpdatedUI(tokenMap);
-
-    // mark all occurrences as pending (amber) until confirmed
-    document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
-      if (span !== el) span.textContent = typed;
-      span.classList.remove('token-saved');
-      span.classList.add('token-pending');
-    });
-
-    // make sure footer + handler are present
-    ensureDocFooter();
-    wireDocFooterHandlers();
-  });
-}
-
-/* ----------------- Document Manager (nested drop-down) ----------------- */
+/* ----------------- Manage Documents submenu ----------------- */
 
 function buildDocMgrMenu() {
   if (!docMgrList) return;
@@ -517,15 +334,12 @@ function buildDocMgrMenu() {
         }
         tag.textContent = checked ? 'Standalone' : 'Grouped';
         saveStandalone(standaloneDocs);
-        saveOverrides();
+        persistOverrides(docOverrides);
 
-        // if the current doc was toggled, re-render with new effective map
+        // If current doc toggled, re-render with effective map
         if (currentDocKey === docKey && currentSegment && currentPolicy) {
           const eff = getEffectiveMap(currentDocKey);
-          loadAndRender(currentSegment, currentPolicy, eff, changeLog).then(() => {
-            ensureDocFooter();
-            wireDocFooterHandlers();
-          });
+          loadAndRender(currentSegment, currentPolicy, eff, changeLog);
         }
       });
 
@@ -540,35 +354,208 @@ function buildDocMgrMenu() {
 }
 
 function showDocMgr() {
-  // align submenu vertically with its parent item
-  const parentRect = (manageDocsBtn as HTMLElement).getBoundingClientRect();
-  const containerRect = (adminMenu as HTMLElement).getBoundingClientRect();
-  const top = parentRect.top - containerRect.top; // relative within adminMenu
+  const top = (manageDocsBtn as HTMLElement).offsetTop;
   (docMgrMenu as HTMLElement).style.top = `${top}px`;
-  docMgrMenu.classList.add('show');
   buildDocMgrMenu();
+  docMgrMenu.classList.add('show');
 }
-function hideDocMgr() {
-  docMgrMenu.classList.remove('show');
-}
+function hideDocMgr() { docMgrMenu.classList.remove('show'); }
 
-manageDocsBtn?.addEventListener('click', (e) => {
+manageDocsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   const open = !docMgrMenu.classList.contains('show');
   if (open) showDocMgr(); else hideDocMgr();
 });
-docMgrClose?.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
+docMgrClose.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
 
-// Close submenu when clicking elsewhere
-document.addEventListener('click', (e) => {
-  const target = e.target as Node;
-  const inside = target && (adminMenu.contains(target) || docMgrMenu.contains(target));
-  if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
-});
+/* ----------------- Wheel + navigation ----------------- */
+
+const policiesDataLocal = policiesData;
+const policyColorsLocal = policyColors;
+
+function resolveSegmentKey(name: string): string {
+  const norm = (s: string) => s.toLowerCase().trim();
+  const match = Object.keys(policiesDataLocal).find(k => norm(k) === norm(name));
+  return match || name;
+}
+
+async function selectSegment(segmentOrKey: string, evt: Event) {
+  const [incomingName, policyId] = segmentOrKey.split('::');
+  const segmentName = resolveSegmentKey(incomingName);
+
+  document.querySelectorAll('#policy-wheel path, #policy-wheel circle')
+    .forEach(el => el.classList.remove('active'));
+
+  const segEl = Array.from(document.querySelectorAll('#policy-wheel .seg'))
+    .find(el => (el as HTMLElement).getAttribute('data-name')?.toLowerCase() === incomingName.toLowerCase());
+  if (segEl) segEl.classList.add('active');
+  else (evt.currentTarget as Element)?.classList.add('active');
+
+  const getPolicies = (seg: string) => {
+    const target = seg.toLowerCase();
+    for (const key of Object.keys(policiesDataLocal)) {
+      if (key.toLowerCase() === target) return policiesDataLocal[key];
+    }
+    return [];
+  };
+
+  const policies = getPolicies(segmentName);
+  const color = policyColorsLocal[segmentName] || '#1c2b4a';
+
+  renderPolicies(
+    segmentName,
+    policies,
+    async (policy) => {
+      if (/^2\.\d+\s+Placeholder$/i.test(policy)) {
+        const docEl = document.getElementById('docContent');
+        if (docEl) docEl.textContent = 'Placeholder — rename and link later.';
+        return;
+      }
+      currentSegment = segmentName;
+      currentPolicy  = policy;
+      currentDocKey  = keyFor(segmentName, policy);
+      pendingKeys.clear();
+      const eff = getEffectiveMap(currentDocKey);
+      await loadAndRender(segmentName, policy, eff, changeLog);
+    },
+    color
+  );
+
+  let initial = policies[0];
+  if (policyId) {
+    const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
+    if (m) initial = m;
+  }
+
+  const docEl = document.getElementById('docContent');
+  const isPlaceholder = initial ? /^2\.\d+\s+Placeholder$/i.test(initial) : false;
+  if (!initial || isPlaceholder) {
+    if (docEl) docEl.textContent = 'Select a policy';
+    return;
+  }
+
+  currentSegment = segmentName;
+  currentPolicy  = initial;
+  currentDocKey  = keyFor(segmentName, initial);
+  pendingKeys.clear();
+  const eff = getEffectiveMap(currentDocKey);
+  if (docEl) docEl.textContent = 'Loading…';
+  await loadAndRender(segmentName, initial, eff, changeLog);
+}
+
+drawWheel(svgWheel, selectSegment);
+
+/* ----------------- Inline token editing & confirm ----------------- */
+
+/** As user types in a token, keep values in sync and mark as pending (amber). */
+function wireInlineEditing() {
+  const root = document.getElementById('docContent');
+  if (!root) return;
+
+  // Plain-text paste only inside tokens
+  root.addEventListener('paste', (e: ClipboardEvent) => {
+    const t = (e.target as HTMLElement)?.closest('.token-edit');
+    if (!t) return;
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    document.execCommand('insertText', false, text);
+  });
+
+  // Mark as pending, mirror to all occurrences of the same key
+  root.addEventListener('input', (e: Event) => {
+    const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
+    if (!el) return;
+
+    const key   = canonicalKey(el.dataset.key || '');
+    const typed = (el.textContent || '').trim();
+
+    pendingKeys.add(key);
+
+    // Any saved class should be dropped while pending edits exist
+    document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
+      if (span !== el) span.textContent = typed;
+      span.classList.remove('token-saved');
+      span.classList.add('token-pending');
+    });
+
+    // If user toggled confirm earlier, untick it once a fresh change occurs
+    const cb = document.getElementById('confirmBox') as HTMLInputElement | null;
+    if (cb) cb.checked = false;
+  });
+}
+
+/** Commit pending keys to global or per-doc maps and turn them green. */
+function wireConfirmHandler() {
+  const cb = document.getElementById('confirmBox') as HTMLInputElement | null;
+  if (!cb) return;
+
+  cb.addEventListener('change', () => {
+    if (!cb.checked || !currentDocKey) return;
+
+    const now = new Date().toISOString();
+    let changedSomething = false;
+
+    pendingKeys.forEach((key) => {
+      // Read the latest typed text (first occurrence is fine — they’re mirrored)
+      const first = document.querySelector<HTMLElement>(`.token-edit[data-key="${key}"]`);
+      const newValue = (first?.textContent || '').trim();
+
+      // Figure out old value from the correct map
+      const isStandalone = standaloneDocs.has(currentDocKey!);
+      const targetMap = isStandalone
+        ? (docOverrides[currentDocKey!] ||= {})
+        : tokenMap;
+
+      const oldValue = String((targetMap as any)[key] ?? (tokenMap as any)[key] ?? '');
+
+      if (newValue !== oldValue) {
+        (targetMap as any)[key] = newValue as any;
+
+        const entry: ChangeLogEntry = {
+          field: key as TokenKey,
+          oldValue,
+          newValue,
+          user: currentUsername || 'unknown',
+          timestamp: now
+        };
+        changeLog.push(entry);
+        changedSomething = true;
+      }
+
+      // Turn every occurrence of this key green
+      document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
+        span.classList.remove('token-pending');
+        span.classList.add('token-saved');
+      });
+    });
+
+    if (changedSomething) {
+      tokenMap.updatedAt = now;
+      saveTokenMap(tokenMap);
+      persistOverrides(docOverrides);
+      saveChangeLog(changeLog);
+      refreshLastUpdated();
+    }
+
+    // Done with this confirmation round
+    pendingKeys.clear();
+    cb.checked = false;
+  });
+}
+
+/** Re-wire events every time a document is rendered. */
+function wireDocEvents() {
+  pendingKeys.clear();
+  wireInlineEditing();
+  wireConfirmHandler();
+}
+
+// Re-wire when ui.ts finishes rendering a document
+window.addEventListener('pp:doc-rendered', wireDocEvents);
 
 /* ----------------- Search ----------------- */
 
-searchBtn.addEventListener('click', () => {
+searchBtn.addEventListener('click', async () => {
   const q = searchInput.value.toLowerCase().trim();
   const matches = searchDocs(q);
   resultsContent.innerHTML = '';
@@ -580,15 +567,13 @@ searchBtn.addEventListener('click', () => {
       div.style.padding = '10px 0';
       div.innerHTML = `<strong>${doc.title}</strong><br><button style="margin-top:5px;">View Document</button>`;
       const btn = div.querySelector('button')!;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         currentSegment = doc.segment;
         currentPolicy  = doc.policy;
         currentDocKey  = keyFor(doc.segment, doc.policy);
+        pendingKeys.clear();
         const eff = getEffectiveMap(currentDocKey);
-        loadAndRender(doc.segment, doc.policy, eff, changeLog).then(() => {
-          ensureDocFooter();
-          wireDocFooterHandlers();
-        });
+        await loadAndRender(doc.segment, doc.policy, eff, changeLog);
       });
       resultsContent.appendChild(div);
     }
@@ -601,5 +586,4 @@ closeResultsBtn.addEventListener('click', () => { searchResults.classList.add('h
 
 window.addEventListener('DOMContentLoaded', () => {
   indexDocuments();
-  enableInlineTokenEditing();
 });
