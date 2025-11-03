@@ -7,77 +7,145 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
+    <!-- Login -->
     <div class="login-screen" id="loginScreen">
       <div class="login-box">
         <h3>Secure Login</h3>
-        <input id="username" placeholder="Username"/>
-        <input id="password" type="password" placeholder="Password"/>
+        <input id="username" placeholder="Username" />
+        <input id="password" type="password" placeholder="Password" />
         <div class="toggle-password" id="togglePw">Show Password</div>
         <button id="loginBtn">Enter</button>
         <p id="loginError" class="error hidden">Invalid credentials.</p>
       </div>
     </div>
 
+    <!-- App -->
     <div id="mainApp" class="main-app hidden">
+      <!-- Top bar -->
       <div class="top-bar">
         <h1>Policy Path</h1>
-        <div id="updateBox">Last updated: Never</div>
-        <button id="adminBtn">⚙️</button>
-        <div id="adminMenu" class="dropdown">
-          <ul>
-            <li class="admin-only" id="ctxSettings">Contextual Settings</li>
-            <li class="admin-only" id="viewTemplate">View Template</li>
-            <li class="admin-only" id="viewUpdates">View Updates</li>
-            <li id="trackChanges">Track Changes</li>
-            <li class="admin-only" id="demoReset">Demo Reset</li>
-            <li class="admin-only" id="toggleSearchBar">Toggle Search Bar</li>
-            <li id="logout">Logout</li>
-          </ul>
+
+        <div class="search-container" id="searchContainer">
+          <input id="semanticSearch" placeholder="Semantic search…" />
+          <button id="searchBtn">Search</button>
+        </div>
+
+        <div class="top-right">
+          <div id="updateBox">Last updated: Never</div>
+          <button id="adminBtn" aria-label="Admin">⚙️</button>
+
+          <!-- Primary admin dropdown -->
+          <div id="adminMenu" class="dropdown">
+            <ul>
+              <li class="admin-only" id="ctxSettings">Contextual Settings</li>
+              <li class="admin-only" id="manageDocs">Manage Documents ▸</li>
+              <li class="admin-only" id="viewTemplate">View Template</li>
+              <li class="admin-only" id="viewUpdates">View Updates</li>
+              <li id="trackChanges">Track Changes</li>
+              <li class="admin-only" id="demoReset">Demo Reset</li>
+              <li class="admin-only" id="toggleSearchBar">Toggle Search Bar</li>
+              <li id="logout">Logout</li>
+            </ul>
+
+            <!-- Nested submenu for Document Manager -->
+            <div id="docMgrMenu" class="dropdown dropdown-sub">
+              <div class="docmgr-head">
+                <strong>Document Manager</strong>
+                <button id="docMgrClose" class="icon-btn" aria-label="Close">×</button>
+              </div>
+              <div id="docMgrList" class="docmgr-list"></div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="search-container" id="searchContainer">
-        <input id="semanticSearch" placeholder="Semantic search..." />
-        <button id="searchBtn">Search</button>
-      </div>
-
+      <!-- Search results -->
       <div id="searchResults" class="card hidden">
         <div class="results-header">
           <h3>Search Results</h3>
-          <button id="closeResultsBtn" class="icon-btn">×</button>
+          <button id="closeResultsBtn" class="icon-btn" aria-label="Close">×</button>
         </div>
         <div id="resultsContent"></div>
       </div>
 
+      <!-- Wheel -->
       <div id="circle-menu">
         <svg id="policy-wheel" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
 
+      <!-- Policies list -->
       <div id="policies-list"></div>
 
+      <!-- Document viewer -->
       <div id="docViewer" class="card">
-        <div id="docContent">Select a document</div>
-        <div id="updateTab" class="update-tab">
-          <button id="updatesToggle">Updates ▼</button>
-          <div id="updatesContent" class="hidden update-content"></div>
+        <div class="doc-header">
+          <div id="updateTab" class="update-tab">
+            <button id="updatesToggle">◂ Updates</button>
+          </div>
+          <button
+            id="openContextBtn"
+            class="context-btn"
+            aria-haspopup="dialog"
+            aria-controls="adminPopup"
+          >Contextualise ▸</button>
         </div>
+
+        <div id="docContent">Select a document</div>
       </div>
 
-      <div class="popup" id="adminPopup">
-        <h3>Admin: Contextual Settings</h3>
-        <input id="orgInput" placeholder="Organisation Name"/>
-        <input id="personInput" placeholder="Person"/>
-        <input id="serviceInput" placeholder="Service Type"/>
+      <!-- LEFT: Updates drawer -->
+      <aside
+        id="updatesDrawer"
+        class="side-drawer left"
+        role="complementary"
+        aria-labelledby="updatesDrawerTitle"
+      >
+        <h3 id="updatesDrawerTitle">Updates</h3>
+        <div id="updatesContent" class="scroll"></div>
+      </aside>
+
+      <!-- RIGHT: Contextualisation drawer -->
+      <div
+        id="adminPopup"
+        class="side-drawer right"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adminPopupTitle"
+      >
+        <h3 id="adminPopupTitle">Contextual Settings</h3>
+
+        <label for="orgShortInput">Short organisation name</label>
+        <input id="orgShortInput" placeholder="e.g., ACME Health" />
+
+        <label for="orgInput">Organisation Name</label>
+        <input id="orgInput" placeholder="Organisation Name" />
+
+        <label for="personInput">Person</label>
+        <input id="personInput" placeholder="Person" />
+
+        <label for="serviceInput">Service Type</label>
+        <input id="serviceInput" placeholder="Service Type" />
+
         <button id="saveTokensBtn">Save</button>
-        <button id="viewTemplate2">View Template</button>
-        <button id="viewUpdates2">View Updates</button>
+        <button id="viewTemplate2" type="button">View Template</button>
+        <button id="viewUpdates2" type="button">View Updates</button>
       </div>
 
-      <div class="popup" id="trackPopup">
-        <h3>Change Log</h3>
+      <!-- Change log modal -->
+      <div
+        class="popup"
+        id="trackPopup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trackPopupTitle"
+      >
+        <h3 id="trackPopupTitle">Change Log</h3>
         <div id="changeLogContent" class="scroll"></div>
         <button id="closeTrack">Close</button>
       </div>
+
+      <!-- Scrim for drawers/modal -->
+      <div id="drawerScrim" class="scrim" aria-hidden="true"></div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

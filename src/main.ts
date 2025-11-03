@@ -1,9 +1,15 @@
+// src/main.ts
 import type { ChangeLogEntry, TokenMap } from './types';
 import { loadTokenMap, saveTokenMap, loadChangeLog, saveChangeLog } from './store';
 import { checkLogin } from './auth';
 import { drawWheel } from './wheel';
-import { loadAndRender, renderPolicies, updateLastUpdatedUI } from './ui';
+import { loadAndRender, renderPolicies, updateLastUpdatedUI, canonicalKey } from './ui';
 import { indexDocuments, search as searchDocs } from './search';
+
+/* ----------------- Globals & helpers ----------------- */
+
+type TokenKey = keyof TokenMap;
+type DocKey = string;
 
 let currentUserRole: 'admin' | 'user' | null = null;
 let currentUsername: string | null = null;
@@ -11,20 +17,77 @@ let currentUsername: string | null = null;
 let tokenMap: TokenMap = loadTokenMap();
 let changeLog: ChangeLogEntry[] = loadChangeLog();
 
+// Expose for quick console checks
 (Object.assign(window as any, { tokenMap, changeLog }));
+
+const STANDALONE_KEY = 'pp_standalone_docs';
+const OVERRIDES_KEY  = 'pp_doc_overrides';
+const REVIEW_PREFIX  = 'pp_reviewed_'; // per-doc reviewed keys
+
+type DocOverrides = Record<DocKey, Partial<TokenMap>>;
+
+const keyFor = (segment: string, policy: string): DocKey => `${segment}::${policy}`;
+
+const loadStandalone = (): Set<DocKey> => {
+  try { return new Set(JSON.parse(localStorage.getItem(STANDALONE_KEY) || '[]')); }
+  catch { return new Set(); }
+};
+const saveStandalone = (s: Set<DocKey>) => {
+  localStorage.setItem(STANDALONE_KEY, JSON.stringify([...s]));
+};
+const loadOverrides = (): DocOverrides => {
+  try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') as DocOverrides; }
+  catch { return {}; }
+};
+const saveOverrides = () => {
+  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(docOverrides));
+};
+const loadReviewed = (docKey: DocKey | null): Set<string> => {
+  if (!docKey) return new Set();
+  try { return new Set<string>(JSON.parse(localStorage.getItem(REVIEW_PREFIX + docKey) || '[]')); }
+  catch { return new Set(); }
+};
+const saveReviewed = (docKey: DocKey | null, set: Set<string>) => {
+  if (!docKey) return;
+  localStorage.setItem(REVIEW_PREFIX + docKey, JSON.stringify([...set]));
+};
+
+let standaloneDocs = loadStandalone();
+let docOverrides: DocOverrides = loadOverrides();
+
+let currentSegment: string | null = null;
+let currentPolicy : string | null = null;
+let currentDocKey : DocKey | null = null;
+
+const getEffectiveMap = (docKey: DocKey | null): TokenMap =>
+  ({ ...(tokenMap || {}), ...(docKey ? (docOverrides[docKey] || {}) : {}) } as TokenMap);
+
+/* ----------------- Data (policy catalog) ----------------- */
 
 const policiesData: Record<string, string[]> = {
   '1. The Individual': [
     'Commitment Statement',
-    '1.1 Person-centred care',
-    '1.2 Dignity, respect and privacy',
-    '1.3 Choice, independence and quality of life',
-    '1.4 Transparency and agreements'
+    '1.1 Person-centred and Culturally Safe Care',
+    '1.2 Trauma-aware and Healing-informed Practice',
+    '1.3 Diversity, Inclusion and Belonging',
+    '1.4 Dignity, Respect and Professional Boundaries',
+    '1.5 Privacy, Confidentiality and Communication',
+    '1.6 Supported Decision-Making and Informed Consent',
+    '1.7 Dignity-of-risk and Positive Risk-taking',
+    '1.8 Resident Advocacy and Interpreter Services',
+    '1.9 Transparency, Care Agreements and Financial Information',
+    '1.10 Resident Engagement and Co-design',
+    'All procedures (22)'
   ],
-  'The organisation': ['2.1 Partnering with individuals', '2.2 Quality, safety & inclusion'],
-  'Care and services': ['3.1 Assessment & planning', '3.2 Delivery of services'],
-  'The environment': ['4.1a Services in home', '4.1b Services outside home'],
-  'Clinical care': ['5.1 Clinical governance', '5.2 Infection control'],
+  'The organisation': [
+    'Commitment Statement',
+    '2.1 Placeholder','2.2 Placeholder','2.3 Placeholder','2.4 Placeholder',
+    '2.5 Placeholder','2.6 Placeholder','2.7 Placeholder','2.8 Placeholder',
+    '2.9 Placeholder','2.10 Placeholder'
+  ],
+  'Care and services': ['commitment statement','3.1 Assessment & planning', '3.2 Delivery of services'],
+  'The environment': ['commitment statement','4.1a Services in home', '4.1b Services outside home'],
+  'Clinical care': ['Clinical governance', 'Infection control'],
   'Food and nutrition': ['6.1 Partnering on food', '6.2 Nutrition assessment'],
   'Residential community': ['7.1 Daily living', '7.2 Transitions']
 };
@@ -38,6 +101,8 @@ const policyColors: Record<string, string> = {
   'Food and nutrition': '#f18f01',
   'Residential community': '#faa916'
 };
+
+/* ----------------- DOM ----------------- */
 
 const loginScreenEl = document.getElementById('loginScreen')!;
 const mainAppEl     = document.getElementById('mainApp')!;
@@ -58,6 +123,12 @@ const demoReset     = document.getElementById('demoReset')!;
 const toggleSearchBar = document.getElementById('toggleSearchBar')!;
 const logoutBtn     = document.getElementById('logout')!;
 
+/* Manage docs submenu */
+const manageDocsBtn = document.getElementById('manageDocs')!;
+const docMgrMenu    = document.getElementById('docMgrMenu')!;
+const docMgrClose   = document.getElementById('docMgrClose')!;
+const docMgrList    = document.getElementById('docMgrList')!;
+
 const searchContainer = document.getElementById('searchContainer')!;
 const searchInput   = document.getElementById('semanticSearch') as HTMLInputElement;
 const searchBtn     = document.getElementById('searchBtn')!;
@@ -67,25 +138,36 @@ const closeResultsBtn = document.getElementById('closeResultsBtn')!;
 
 const svgWheel      = document.getElementById('policy-wheel') as unknown as SVGSVGElement;
 
-const adminPopup    = document.getElementById('adminPopup')!;
+/* Drawers */
+const adminPopup    = document.getElementById('adminPopup')!;      // Right drawer
+const updatesDrawer = document.getElementById('updatesDrawer')!;   // Left drawer
+const drawerScrim   = document.getElementById('drawerScrim')!;
+
+const orgShortInput = document.getElementById('orgShortInput') as HTMLInputElement;
 const orgInput      = document.getElementById('orgInput') as HTMLInputElement;
 const personInput   = document.getElementById('personInput') as HTMLInputElement;
 const serviceInput  = document.getElementById('serviceInput') as HTMLInputElement;
 const saveTokensBtn = document.getElementById('saveTokensBtn')!;
+
 const updateTabBtn  = document.getElementById('updatesToggle')!;
 const updatesContent= document.getElementById('updatesContent')!;
+
+const openContextBtn = document.getElementById('openContextBtn') as HTMLButtonElement;
 
 const trackPopup    = document.getElementById('trackPopup')!;
 const changeLogContent = document.getElementById('changeLogContent')!;
 const closeTrackBtn = document.getElementById('closeTrack')!;
+
+/* ----------------- Permissions & UI bits ----------------- */
 
 function applyPermissions() {
   document.querySelectorAll('#adminMenu li.admin-only').forEach(li => {
     (li as HTMLElement).style.display = (currentUserRole === 'admin') ? 'block' : 'none';
   });
 }
-
 function updateLastUpdated() { updateLastUpdatedUI(tokenMap); }
+
+/* ----------------- Auth ----------------- */
 
 loginBtn.addEventListener('click', () => {
   const res = checkLogin(userField.value, passField.value);
@@ -113,47 +195,97 @@ logoutBtn.addEventListener('click', () => {
   currentUsername = null;
 });
 
-adminBtn.addEventListener('click', () => {
-  adminMenu.style.display = (adminMenu.style.display === 'block') ? 'none' : 'block';
-});
-ctxSettings.addEventListener('click', () => {
+/* ----------------- Drawers ----------------- */
+
+const closeAllDrawers = () => {
+  adminPopup.classList.remove('open');
+  updatesDrawer.classList.remove('open');
+  drawerScrim.classList.remove('show');
+  updatesContent.classList.add('hidden');
+};
+
+const openContextDrawer = () => {
   adminMenu.style.display = 'none';
-  orgInput.value = tokenMap.organisation_name;
-  personInput.value = tokenMap.person;
-  serviceInput.value = tokenMap.service_type;
-  (adminPopup as HTMLElement).style.display = 'block';
+  orgInput.value      = tokenMap.organisation_name;
+  (orgShortInput as HTMLInputElement).value = (tokenMap as any).organisation_short || '';
+  personInput.value   = tokenMap.person;
+  serviceInput.value  = tokenMap.service_type;
+  adminPopup.classList.add('open');
+  drawerScrim.classList.add('show');
+};
+
+const openUpdatesDrawer = () => {
+  updatesContent.classList.remove('hidden');
+  updatesDrawer.classList.add('open');
+  drawerScrim.classList.add('show');
+};
+
+adminBtn.addEventListener('click', () => {
+  const show = adminMenu.style.display !== 'block';
+  adminMenu.style.display = show ? 'block' : 'none';
+  if (!show) hideDocMgr();
 });
+ctxSettings.addEventListener('click', openContextDrawer);
+openContextBtn.addEventListener('click', openContextDrawer);
+updateTabBtn.addEventListener('click', openUpdatesDrawer);
+
+drawerScrim.addEventListener('click', () => { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAllDrawers(); hideDocMgr(); adminMenu.style.display = 'none'; } });
+
+/* ----------------- Admin menu items ----------------- */
+
 viewTemplate.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Template coming soon.'); });
 viewUpdates.addEventListener('click', () => { adminMenu.style.display = 'none'; alert('View Updates coming soon.'); });
+
 demoReset.addEventListener('click', () => {
   adminMenu.style.display = 'none';
   if (!confirm('Really clear all change history?')) return;
   changeLog = [];
-  localStorage.setItem('changeLog', JSON.stringify(changeLog));
+  saveChangeLog(changeLog);
   changeLogContent.innerHTML = '<p>No changes yet.</p>';
   updatesContent.innerHTML = '<p>No updates for this document.</p>';
   updatesContent.classList.add('hidden');
 });
-toggleSearchBar.addEventListener('click', () => { searchContainer.classList.toggle('hidden'); adminMenu.style.display = 'none'; });
+
+toggleSearchBar.addEventListener('click', () => {
+  searchContainer.classList.toggle('hidden');
+  adminMenu.style.display = 'none';
+});
+
+/* ----------------- Save contextual settings ----------------- */
 
 saveTokensBtn.addEventListener('click', () => {
   const oldMap = { ...tokenMap };
-  tokenMap.organisation_name = (orgInput.value || '').trim();
-  tokenMap.person            = (personInput.value || '').trim();
-  tokenMap.service_type      = (serviceInput.value || '').trim();
+
+  tokenMap.organisation_name  = (orgInput.value || '').trim();
+  (tokenMap as any).organisation_short = (orgShortInput.value || '').trim();
+  tokenMap.person             = (personInput.value || '').trim();
+  tokenMap.service_type       = (serviceInput.value || '').trim();
+
   const now = new Date().toISOString();
   tokenMap.updatedAt = now;
-  (['organisation_name','person','service_type'] as const).forEach(field => {
-    if ((tokenMap as any)[field] !== (oldMap as any)[field]) {
-      const entry: ChangeLogEntry = { field, oldValue: (oldMap as any)[field], newValue: (tokenMap as any)[field], user: currentUsername || 'unknown', timestamp: now };
-      changeLog.push(entry);
-    }
-  });
-  localStorage.setItem('tokenMap', JSON.stringify(tokenMap));
-  localStorage.setItem('changeLog', JSON.stringify(changeLog));
-  (adminPopup as HTMLElement).style.display = 'none';
+
+  (['organisation_name','organisation_short','person','service_type'] as TokenKey[])
+    .forEach((field) => {
+      if ((tokenMap as any)[field] !== (oldMap as any)[field]) {
+        changeLog.push({
+          field,
+          oldValue: (oldMap as any)[field],
+          newValue: (tokenMap as any)[field],
+          user: currentUsername || 'unknown',
+          timestamp: now
+        });
+      }
+    });
+
+  saveTokenMap(tokenMap);
+  saveChangeLog(changeLog);
+
   updateLastUpdated();
+  closeAllDrawers();
 });
+
+/* ----------------- Change log modal ----------------- */
 
 trackChanges.addEventListener('click', () => {
   adminMenu.style.display = 'none';
@@ -166,32 +298,297 @@ trackChanges.addEventListener('click', () => {
 });
 closeTrackBtn.addEventListener('click', () => { (trackPopup as HTMLElement).style.display = 'none'; });
 
+/* ----------------- Wheel + navigation ----------------- */
+
 const policiesDataLocal = policiesData;
 const policyColorsLocal = policyColors;
 
-function selectSegment(segmentName: string, evt: Event) {
-  document.querySelectorAll('#policy-wheel path, #policy-wheel circle').forEach(el => el.classList.remove('active'));
-  (evt.currentTarget as Element)?.classList.add('active');
-  const policies = policiesDataLocal[segmentName] || [];
+function resolveSegmentKey(name: string): string {
+  const norm = (s: string) => s.toLowerCase().trim();
+  const match = Object.keys(policiesDataLocal).find(k => norm(k) === norm(name));
+  return match || name;
+}
+
+function selectSegment(segmentOrKey: string, evt: Event) {
+  const [incomingName, policyId] = segmentOrKey.split('::');
+  const segmentName = resolveSegmentKey(incomingName);
+
+  document.querySelectorAll('#policy-wheel path, #policy-wheel circle')
+    .forEach(el => el.classList.remove('active'));
+
+  const segEl = Array.from(document.querySelectorAll('#policy-wheel .seg'))
+    .find(el => (el as HTMLElement).getAttribute('data-name')?.toLowerCase() === incomingName.toLowerCase());
+  if (segEl) segEl.classList.add('active');
+  else (evt.currentTarget as Element)?.classList.add('active');
+
+  const policies = getPolicies(segmentName);
   const color = policyColorsLocal[segmentName] || '#1c2b4a';
-  renderPolicies(segmentName, policies, (policy) => { loadAndRender(segmentName, policy, tokenMap, changeLog); }, color);
-  const first = policies[0];
+
+  function getPolicies(segmentName: string): string[] {
+    const target = segmentName.toLowerCase();
+    for (const key of Object.keys(policiesDataLocal)) {
+      if (key.toLowerCase() === target) return policiesDataLocal[key];
+    }
+    return [];
+  }
+
+  renderPolicies(
+    segmentName,
+    policies,
+    (policy) => {
+      if (/^2\.\d+\s+Placeholder$/i.test(policy)) {
+        const docEl = document.getElementById('docContent');
+        if (docEl) docEl.textContent = 'Select a policy';
+        return;
+      }
+
+      // record current doc
+      currentSegment = segmentName;
+      currentPolicy  = policy;
+      currentDocKey  = keyFor(segmentName, policy);
+
+      const eff       = getEffectiveMap(currentDocKey);
+      const reviewed  = loadReviewed(currentDocKey);
+
+      loadAndRender(segmentName, policy, eff, changeLog, reviewed).then(() => {
+        ensureDocFooter();
+        wireDocFooterHandlers();
+      });
+    },
+    color
+  );
+
+  let initial = policies[0];
+  if (policyId) {
+    const m = policies.find(p => p.startsWith(`${policyId} `) || p === policyId);
+    if (m) initial = m;
+  }
+
   const docEl = document.getElementById('docContent');
-  if (docEl) docEl.textContent = first ? 'Loading…' : 'Select a policy';
-  if (first) loadAndRender(segmentName, first, tokenMap, changeLog);
+  const isPlaceholder = initial ? /^2\.\d+\s+Placeholder$/i.test(initial) : false;
+  if (!initial || isPlaceholder) {
+    if (docEl) docEl.textContent = 'Select a policy';
+    return;
+  }
+
+  currentSegment = segmentName;
+  currentPolicy  = initial;
+  currentDocKey  = keyFor(segmentName, initial);
+
+  const eff       = getEffectiveMap(currentDocKey);
+  const reviewed  = loadReviewed(currentDocKey);
+
+  if (docEl) docEl.textContent = 'Loading…';
+  loadAndRender(segmentName, initial, eff, changeLog, reviewed).then(() => {
+    ensureDocFooter();
+    wireDocFooterHandlers();
+  });
 }
 
 drawWheel(svgWheel, selectSegment);
 
-document.getElementById('updatesToggle')!.addEventListener('click', () => {
-  document.getElementById('updatesContent')!.classList.toggle('hidden');
+/* ----------------- Inline token editing ----------------- */
+
+function pushChangeLog(field: TokenKey, oldValue: string, newValue: string) {
+  changeLog.push({
+    field,
+    oldValue,
+    newValue,
+    user: currentUsername || 'unknown',
+    timestamp: new Date().toISOString()
+  });
+  saveChangeLog(changeLog);
+}
+
+function ensureDocFooter() {
+  const viewer = document.getElementById('docViewer');
+  if (!viewer) return;
+  let footer = viewer.querySelector('.doc-footer');
+  if (!footer) {
+    footer = document.createElement('div');
+    footer.className = 'doc-footer';
+    footer.innerHTML = `
+      <label class="confirm-changes">
+        <input type="checkbox" id="markReviewed" />
+        Mark edited terms in this document as reviewed (turn green)
+      </label>
+    `;
+    viewer.appendChild(footer);
+  } else {
+    const cb = footer.querySelector<HTMLInputElement>('#markReviewed');
+    if (cb) cb.checked = false;
+  }
+}
+
+function wireDocFooterHandlers() {
+  const cb = document.getElementById('markReviewed') as HTMLInputElement | null;
+  if (!cb) return;
+  cb.onchange = () => {
+    if (!cb.checked || !currentDocKey) return;
+
+    // Persist reviewed keys for this document
+    const reviewed = loadReviewed(currentDocKey);
+    document.querySelectorAll<HTMLElement>('#docContent .token-edit').forEach(el => {
+      const k = canonicalKey(el.dataset.key || '');
+      reviewed.add(k);
+      el.classList.remove('token-pending');
+      el.classList.add('token-saved');
+    });
+    saveReviewed(currentDocKey, reviewed);
+  };
+}
+
+function enableInlineTokenEditing() {
+  const root = document.getElementById('docContent');
+  if (!root) return;
+
+  // plain-text paste only
+  root.addEventListener('paste', (e: any) => {
+    const t = (e.target as HTMLElement)?.closest('.token-edit');
+    if (!t) return;
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    document.execCommand('insertText', false, text);
+  });
+
+  root.addEventListener('input', (e: any) => {
+    const el = (e.target as HTMLElement)?.closest('.token-edit') as HTMLElement | null;
+    if (!el || !currentDocKey) return;
+
+    const key   = el.dataset.key as TokenKey;
+    const typed = (el.textContent || '').trim();
+
+    // Decide where to save: per-doc if standalone, else global
+    if (standaloneDocs.has(currentDocKey)) {
+      const ov = (docOverrides[currentDocKey] ||= {});
+      const before = String((ov[key] ?? tokenMap[key] ?? '') as any);
+      ov[key] = typed as any;
+      saveOverrides();
+      pushChangeLog(key, before, typed);
+    } else {
+      const before = String((tokenMap[key] ?? '') as any);
+      (tokenMap as any)[key] = typed;
+      tokenMap.updatedAt = new Date().toISOString();
+      saveTokenMap(tokenMap);
+      pushChangeLog(key, before, typed);
+    }
+
+    updateLastUpdatedUI(tokenMap);
+
+    // Editing cancels "reviewed" for this key and shows amber
+    const rset = loadReviewed(currentDocKey);
+    rset.delete(canonicalKey(String(key)));
+    saveReviewed(currentDocKey, rset);
+
+    document.querySelectorAll<HTMLElement>(`.token-edit[data-key="${key}"]`).forEach(span => {
+      if (span !== el) span.textContent = typed;
+      span.classList.remove('token-saved');
+      span.classList.add('token-pending');
+    });
+
+    ensureDocFooter();
+    wireDocFooterHandlers();
+  });
+}
+
+/* ----------------- Document Manager (nested drop-down) ----------------- */
+
+function buildDocMgrMenu() {
+  if (!docMgrList) return;
+  docMgrList.innerHTML = '';
+
+  for (const segment of Object.keys(policiesData)) {
+    const section = document.createElement('div');
+    section.className = 'dm-section';
+
+    const segTitle = document.createElement('div');
+    segTitle.className = 'dm-seg';
+    segTitle.textContent = segment;
+    section.appendChild(segTitle);
+
+    for (const policy of policiesData[segment]) {
+      const docKey = keyFor(segment, policy);
+      const row = document.createElement('label');
+      row.className = 'dm-row';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = standaloneDocs.has(docKey);
+      cb.dataset.doc = docKey;
+
+      const title = document.createElement('span');
+      title.className = 'dm-title';
+      title.textContent = policy;
+
+      const tag = document.createElement('span');
+      tag.className = 'dm-tag';
+      tag.textContent = cb.checked ? 'Standalone' : 'Grouped';
+
+      cb.addEventListener('change', () => {
+        const checked = cb.checked;
+        if (checked) {
+          standaloneDocs.add(docKey);
+          docOverrides[docKey] ||= {};
+        } else {
+          standaloneDocs.delete(docKey);
+          delete docOverrides[docKey];
+        }
+        tag.textContent = checked ? 'Standalone' : 'Grouped';
+        saveStandalone(standaloneDocs);
+        saveOverrides();
+
+        // if current doc was toggled, re-render
+        if (currentDocKey === docKey && currentSegment && currentPolicy) {
+          const eff      = getEffectiveMap(currentDocKey);
+          const reviewed = loadReviewed(currentDocKey);
+          loadAndRender(currentSegment, currentPolicy, eff, changeLog, reviewed).then(() => {
+            ensureDocFooter();
+            wireDocFooterHandlers();
+          });
+        }
+      });
+
+      row.appendChild(cb);
+      row.appendChild(title);
+      row.appendChild(tag);
+      section.appendChild(row);
+    }
+
+    docMgrList.appendChild(section);
+  }
+}
+
+function showDocMgr() {
+  const parentRect = (manageDocsBtn as HTMLElement).getBoundingClientRect();
+  const containerRect = (adminMenu as HTMLElement).getBoundingClientRect();
+  const top = parentRect.top - containerRect.top; // relative within adminMenu
+  (docMgrMenu as HTMLElement).style.top = `${top}px`;
+  docMgrMenu.classList.add('show');
+  buildDocMgrMenu();
+}
+function hideDocMgr() {
+  docMgrMenu.classList.remove('show');
+}
+
+manageDocsBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = !docMgrMenu.classList.contains('show');
+  if (open) showDocMgr(); else hideDocMgr();
+});
+docMgrClose?.addEventListener('click', (e) => { e.stopPropagation(); hideDocMgr(); });
+
+// Close submenu when clicking elsewhere
+document.addEventListener('click', (e) => {
+  const target = e.target as Node;
+  const inside = target && (adminMenu.contains(target) || docMgrMenu.contains(target));
+  if (!inside) { hideDocMgr(); adminMenu.style.display = 'none'; }
 });
 
-document.getElementById('searchBtn')!.addEventListener('click', () => {
-  const q = (document.getElementById('semanticSearch') as HTMLInputElement).value.toLowerCase().trim();
+/* ----------------- Search ----------------- */
+
+searchBtn.addEventListener('click', () => {
+  const q = searchInput.value.toLowerCase().trim();
   const matches = searchDocs(q);
-  const resultsContent = document.getElementById('resultsContent')!;
-  const searchResults = document.getElementById('searchResults')!;
   resultsContent.innerHTML = '';
   if (!q) resultsContent.innerHTML = '<p>Please enter a search term.</p>';
   else if (matches.length === 0) resultsContent.innerHTML = '<p>No results found.</p>';
@@ -201,14 +598,27 @@ document.getElementById('searchBtn')!.addEventListener('click', () => {
       div.style.padding = '10px 0';
       div.innerHTML = `<strong>${doc.title}</strong><br><button style="margin-top:5px;">View Document</button>`;
       const btn = div.querySelector('button')!;
-      btn.addEventListener('click', () => { loadAndRender(doc.segment, doc.policy, tokenMap, changeLog); });
+      btn.addEventListener('click', () => {
+        currentSegment = doc.segment;
+        currentPolicy  = doc.policy;
+        currentDocKey  = keyFor(doc.segment, doc.policy);
+        const eff      = getEffectiveMap(currentDocKey);
+        const reviewed = loadReviewed(currentDocKey);
+        loadAndRender(doc.segment, doc.policy, eff, changeLog, reviewed).then(() => {
+          ensureDocFooter();
+          wireDocFooterHandlers();
+        });
+      });
       resultsContent.appendChild(div);
     }
   }
   searchResults.classList.remove('hidden');
 });
-document.getElementById('closeResultsBtn')!.addEventListener('click', () => {
-  document.getElementById('searchResults')!.classList.add('hidden');
-});
+closeResultsBtn.addEventListener('click', () => { searchResults.classList.add('hidden'); });
 
-window.addEventListener('DOMContentLoaded', () => { indexDocuments(); });
+/* ----------------- Boot ----------------- */
+
+window.addEventListener('DOMContentLoaded', () => {
+  indexDocuments();
+  enableInlineTokenEditing();
+});
